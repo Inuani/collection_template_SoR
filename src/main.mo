@@ -9,6 +9,8 @@ import AssetCanister "mo:liminal/AssetCanister";
 import Text "mo:new-base/Text";
 import ProtectedRoutes "nfc_protec_routes";
 import Routes "routes";
+import Files "files";
+import Result "mo:base/Result";
 
 // import Router "mo:liminal/Router";
 // import RouteContext "mo:liminal/RouteContext";
@@ -18,23 +20,28 @@ import HttpContext "mo:liminal/HttpContext";
 
 shared ({ caller = initializer }) actor class Actor() = self {
 
-    let canisterId = Principal.fromActor(self);
+    transient let canisterId = Principal.fromActor(self);
+    type ChunkId = Files.ChunkId;
 
     stable var assetStableData = HttpAssets.init_stable_store(canisterId, initializer);
     assetStableData := HttpAssets.upgrade_stable_store(assetStableData);
 
     stable let protectedRoutesState = ProtectedRoutes.init();
-    let protected_routes_storage = ProtectedRoutes.RoutesStorage(protectedRoutesState);
+    transient let protected_routes_storage = ProtectedRoutes.RoutesStorage(protectedRoutesState);
+
+    stable let fileStorageState = Files.init();
+    transient let file_storage = Files.FileStorage(fileStorageState);
+
 
     transient let setPermissions : HttpAssets.SetPermissions = {
         commit = [initializer];
         manage_permissions = [initializer];
         prepare = [initializer];
     };
-    var assetStore = HttpAssets.Assets(assetStableData, ?setPermissions);
-    var assetCanister = AssetCanister.AssetCanister(assetStore);
+    transient var assetStore = HttpAssets.Assets(assetStableData, ?setPermissions);
+    transient var assetCanister = AssetCanister.AssetCanister(assetStore);
 
-    let assetMiddlewareConfig : AssetsMiddleware.Config = {
+    transient let assetMiddlewareConfig : AssetsMiddleware.Config = {
         store = assetStore;
     };
 
@@ -75,7 +82,7 @@ shared ({ caller = initializer }) actor class Actor() = self {
     };
 
 
-    let app = Liminal.App({
+    transient let app = Liminal.App({
         middleware = [
             createNFCProtectionMiddleware(),
             AssetsMiddleware.new(assetMiddlewareConfig),
@@ -103,6 +110,45 @@ shared ({ caller = initializer }) actor class Actor() = self {
             case (#ok(response)) response;
         };
     };
+
+    public func upload(chunk : [Nat8]) : async () {
+        file_storage.upload(chunk);
+      };
+
+      public func uploadFinalize(title : Text, artist : Text, contentType : Text) : async Result.Result<Text, Text> {
+        let uploadResult = file_storage.uploadFinalize(title, artist, contentType);
+
+        switch (uploadResult) {
+          case (#ok(msg)) {
+            #ok(msg);
+          };
+          case (#err(msg)) {
+            #err(msg);
+          };
+        };
+      };
+
+      public query func getFileChunk(title : Text, chunkId : ChunkId) : async ?{
+        chunk : [Nat8];
+        totalChunks : Nat;
+        contentType : Text;
+        title : Text;
+        artist : Text;
+      } {
+        file_storage.getFileChunk(title, chunkId);
+      };
+
+      public query func listFiles() : async [(Text, Text, Text)] {
+        file_storage.listFiles();
+      };
+
+      public func deleteFile(title : Text) : async Bool {
+        file_storage.deleteFile(title);
+      };
+
+      public query func getStoredFileCount() : async Nat {
+        file_storage.getStoredFileCount();
+      };
 
     assetStore.set_streaming_callback(http_request_streaming_callback);
 
