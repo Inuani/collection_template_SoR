@@ -5,7 +5,7 @@ import Liminal      "mo:liminal";
 import Text "mo:new-base/Text";
 import Nat "mo:base/Nat";
 import Route "mo:liminal/Route";
-import BleuCollection "collection";
+import Collection "collection";
 
 module Routes {
    public func routerConfig(canisterId: Text) : Router.Config {
@@ -46,16 +46,16 @@ module Routes {
                    let id = switch (Nat.fromText(idText)) {
                        case (?num) num;
                        case null {
-                           let html = BleuCollection.generateNotFoundPage(0);
+                           let html = Collection.generateNotFoundPage(0);
                            return ctx.buildResponse(#notFound, #html(html));
                        };
                    };
 
-                   let html = BleuCollection.generateBleuPage(id);
+                   let html = Collection.generateItemPage(id);
                    ctx.buildResponse(#ok, #html(html))
                }),
                Router.getQuery("/collection", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
-                   let html = BleuCollection.generateCollectionPage();
+                   let html = Collection.generateCollectionPage();
                    ctx.buildResponse(#ok, #html(html))
                }),
         Router.getQuery("/{path}",

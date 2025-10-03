@@ -3,7 +3,7 @@ import Nat "mo:base/Nat";
 
 module {
     // Collection data - you can expand this with more properties
-    public type BleuItem = {
+    public type Item = {
         id: Nat;
         name: Text;
         thumbnailUrl: Text; // Image for collection grid
@@ -14,7 +14,7 @@ module {
     };
 
     // Mock data for your collection - replace with your actual data source
-    private let bleuCollection: [BleuItem] = [
+    private let itemCollection: [Item] = [
         {
             id = 0;
             name = "Hoodie #0";
@@ -53,19 +53,19 @@ module {
         }
     ];
 
-    // Get a specific bleu item by ID
-    public func getBleuItem(id: Nat): ?BleuItem {
-        if (id < bleuCollection.size()) {
-            ?bleuCollection[id]
+    // Get a specific item by ID
+    public func getItem(id: Nat): ?Item {
+        if (id < itemCollection.size()) {
+            ?itemCollection[id]
         } else {
             null
         }
     };
 
-    // Generate HTML page for a specific bleu item
-    public func generateBleuPage(id: Nat): Text {
-        switch (getBleuItem(id)) {
-            case (?item) generateItemPage(item);
+    // Generate HTML page for a specific item
+    public func generateItemPage(id: Nat): Text {
+        switch (getItem(id)) {
+            case (?item) generateItemDetailPage(item);
             case null generateNotFoundPage(id);
         }
     };
@@ -170,7 +170,7 @@ module {
     };
 
     // Generate individual item page
-    private func generateItemPage(item: BleuItem): Text {
+    private func generateItemDetailPage(item: Item): Text {
         let attributesHtml = generateAttributesHtml(item.attributes);
         let rarityClass = "rarity-" # Text.toLowercase(item.rarity);
 
@@ -352,7 +352,7 @@ module {
     // Generate grid of all items for collection page
     private func generateItemsGrid(): Text {
         var html = "";
-        for (item in bleuCollection.vals()) {
+        for (item in itemCollection.vals()) {
             let rarityClass = "rarity-" # Text.toLowercase(item.rarity);
             html #= "<a href=\"/item/" # Nat.toText(item.id) # "\" class=\"item-card\">
                 <img src=\"" # item.thumbnailUrl # "\" alt=\"" # item.name # "\" class=\"item-image\">
@@ -383,7 +383,7 @@ module {
 <head>
     <meta charset=\"UTF-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-    <title>Bleu Not Found</title>
+    <title>Item Not Found</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -427,8 +427,8 @@ module {
 </head>
 <body>
     <div class=\"error-container\">
-        <h1>Bleu Not Found</h1>
-        <p>Sorry, Bleu #" # Nat.toText(id) # " doesn't exist in this collection.</p>
+        <h1>Item Not Found</h1>
+        <p>Sorry, Item #" # Nat.toText(id) # " doesn't exist in this collection.</p>
         <a href=\"/collection\">View Collection</a>
     </div>
 </body>
