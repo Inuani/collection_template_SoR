@@ -6,6 +6,9 @@ import Iter "mo:base/Iter";
 import Buffer "mo:base/Buffer";
 import Nat "mo:base/Nat";
 import Option "mo:base/Option";
+import Nat32 "mo:base/Nat32";
+import Nat8 "mo:base/Nat8";
+import Char "mo:base/Char";
 
 module {
 
@@ -120,6 +123,76 @@ module {
 
         public func getStoredFileCount() : Nat {
             storedFiles.size();
+        };
+
+        // Get file as base64 data URL for embedding in HTML
+        public func getFileAsDataUrl(title : Text) : ?Text {
+            switch (storedFiles.get(title)) {
+                case (null) { null };
+                case (?file) {
+                    // Reconstruct full file from chunks
+                    var allBytes : [Nat8] = [];
+                    for (chunk in file.data.vals()) {
+                        allBytes := Array.append(allBytes, chunk);
+                    };
+
+                    // Convert to base64
+                    let base64 = bytesToBase64(allBytes);
+
+                    // Return as data URL
+                    ?("data:" # file.contentType # ";base64," # base64);
+                };
+            };
+        };
+
+        // Helper function to convert bytes to base64
+        private func bytesToBase64(bytes : [Nat8]) : Text {
+            let base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            var result = "";
+            var i = 0;
+
+            while (i < bytes.size()) {
+                let b1 = bytes[i];
+                let b2 : Nat8 = if (i + 1 < bytes.size()) bytes[i + 1] else 0;
+                let b3 : Nat8 = if (i + 2 < bytes.size()) bytes[i + 2] else 0;
+
+                let n = (Nat32.fromNat(Nat8.toNat(b1)) << 16) |
+                        (Nat32.fromNat(Nat8.toNat(b2)) << 8) |
+                        Nat32.fromNat(Nat8.toNat(b3));
+
+                let c1 = Nat32.toNat((n >> 18) & 63);
+                let c2 = Nat32.toNat((n >> 12) & 63);
+                let c3 = Nat32.toNat((n >> 6) & 63);
+                let c4 = Nat32.toNat(n & 63);
+
+                result #= Text.fromChar(charAt(base64Chars, c1));
+                result #= Text.fromChar(charAt(base64Chars, c2));
+
+                if (i + 1 < bytes.size()) {
+                    result #= Text.fromChar(charAt(base64Chars, c3));
+                } else {
+                    result #= "=";
+                };
+
+                if (i + 2 < bytes.size()) {
+                    result #= Text.fromChar(charAt(base64Chars, c4));
+                } else {
+                    result #= "=";
+                };
+
+                i += 3;
+            };
+
+            result;
+        };
+
+        private func charAt(str : Text, index : Nat) : Char {
+            var i = 0;
+            for (c in str.chars()) {
+                if (i == index) return c;
+                i += 1;
+            };
+            ' '; // Should never reach here with valid input
         };
     };
 };

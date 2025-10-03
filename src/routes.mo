@@ -8,7 +8,7 @@ import Route "mo:liminal/Route";
 import Collection "collection";
 
 module Routes {
-   public func routerConfig(canisterId: Text) : Router.Config {
+   public func routerConfig(canisterId: Text, getFileAsDataUrl: (Text) -> ?Text) : Router.Config {
     {
       prefix              = null;
       identityRequirement = null;
@@ -32,7 +32,10 @@ module Routes {
                                 # "        </a>"
                                 # "    </div>"
                   # "    <div style='text-align: center; margin-bottom: 20px;'>"
-                  # "        <img src='/logo.webp' alt='logo collection' style='width: 100px; height: auto; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto;'/>"
+                  # (switch (getFileAsDataUrl("Logo")) {
+                      case (?dataUrl) "        <img src='" # dataUrl # "' alt='logo collection' style='width: 300px; height: auto; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto;'/>";
+                      case null "        <!-- Image not found -->";
+                  })
                   # "        <h1 style='color: #90EE90; margin: 0;'>Collection association Lo13to</h1>"
                   # "    </div>"
                   # "</body>"

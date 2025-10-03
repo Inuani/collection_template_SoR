@@ -1,7 +1,5 @@
 import Liminal "mo:liminal";
 import Principal "mo:new-base/Principal";
-// import Blob "mo:new-base/Blob";
-// import Result "mo:new-base/Result";
 import Error "mo:new-base/Error";
 import AssetsMiddleware "mo:liminal/Middleware/Assets";
 import HttpAssets "mo:http-assets";
@@ -11,9 +9,6 @@ import ProtectedRoutes "nfc_protec_routes";
 import Routes "routes";
 import Files "files";
 import Result "mo:base/Result";
-
-// import Router "mo:liminal/Router";
-// import RouteContext "mo:liminal/RouteContext";
 import RouterMiddleware "mo:liminal/Middleware/Router";
 import App "mo:liminal/App";
 import HttpContext "mo:liminal/HttpContext";
@@ -86,7 +81,7 @@ shared ({ caller = initializer }) actor class Actor() = self {
         middleware = [
             createNFCProtectionMiddleware(),
             AssetsMiddleware.new(assetMiddlewareConfig),
-            RouterMiddleware.new(Routes.routerConfig(Principal.toText(canisterId))),
+            RouterMiddleware.new(Routes.routerConfig(Principal.toText(canisterId), file_storage.getFileAsDataUrl)),
         ];
         errorSerializer = Liminal.defaultJsonErrorSerializer;
         candidRepresentationNegotiator = Liminal.defaultCandidRepresentationNegotiator;
