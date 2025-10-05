@@ -1,5 +1,5 @@
-import Text "mo:base/Text";
-import Nat "mo:base/Nat";
+import Text "mo:core/Text";
+import Nat "mo:core/Nat";
 
 module {
     // Collection data - you can expand this with more properties
@@ -172,7 +172,7 @@ module {
     // Generate individual item page
     private func generateItemDetailPage(item: Item): Text {
         let attributesHtml = generateAttributesHtml(item.attributes);
-        let rarityClass = "rarity-" # Text.toLowercase(item.rarity);
+        let rarityClass = "rarity-" # Text.toLower(item.rarity);
 
         "<!DOCTYPE html>
 <html lang=\"en\">
@@ -353,7 +353,7 @@ module {
     private func generateItemsGrid(): Text {
         var html = "";
         for (item in itemCollection.vals()) {
-            let rarityClass = "rarity-" # Text.toLowercase(item.rarity);
+            let rarityClass = "rarity-" # Text.toLower(item.rarity);
             html #= "<a href=\"/item/" # Nat.toText(item.id) # "\" class=\"item-card\">
                 <img src=\"" # item.thumbnailUrl # "\" alt=\"" # item.name # "\" class=\"item-image\">
                 <h3 class=\"item-title\">" # item.name # "</h3>

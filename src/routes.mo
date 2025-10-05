@@ -2,8 +2,8 @@
 import Router       "mo:liminal/Router";
 import RouteContext "mo:liminal/RouteContext";
 import Liminal      "mo:liminal";
-import Text "mo:new-base/Text";
-import Nat "mo:base/Nat";
+import Text "mo:core/Text";
+import Nat "mo:core/Nat";
 import Route "mo:liminal/Route";
 import Collection "collection";
 
