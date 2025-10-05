@@ -8,6 +8,7 @@ import Text "mo:core/Text";
 import ProtectedRoutes "nfc_protec_routes";
 import Routes "routes";
 import Files "files";
+import Collection "collection";
 import Result "mo:core/Result";
 import RouterMiddleware "mo:liminal/Middleware/Router";
 import App "mo:liminal/App";
@@ -26,6 +27,9 @@ shared ({ caller = initializer }) actor class Actor() = self {
 
     stable let fileStorageState = Files.init();
     transient let file_storage = Files.FileStorage(fileStorageState);
+
+    stable let collectionState = Collection.init();
+    transient let collection = Collection.Collection(collectionState);
 
 
     transient let setPermissions : HttpAssets.SetPermissions = {
@@ -81,7 +85,7 @@ shared ({ caller = initializer }) actor class Actor() = self {
         middleware = [
             createNFCProtectionMiddleware(),
             AssetsMiddleware.new(assetMiddlewareConfig),
-            RouterMiddleware.new(Routes.routerConfig(Principal.toText(canisterId), file_storage.getFileAsDataUrl)),
+            RouterMiddleware.new(Routes.routerConfig(Principal.toText(canisterId), file_storage.getFileAsDataUrl, collection)),
         ];
         errorSerializer = Liminal.defaultJsonErrorSerializer;
         candidRepresentationNegotiator = Liminal.defaultCandidRepresentationNegotiator;
@@ -142,7 +146,71 @@ shared ({ caller = initializer }) actor class Actor() = self {
       };
 
       public query func getStoredFileCount() : async Nat {
-        file_storage.getStoredFileCount();
+          file_storage.getStoredFileCount();
+      };
+
+      // ============================================
+      // COLLECTION MANAGEMENT FUNCTIONS (Admin Only)
+      // ============================================
+
+      public shared ({ caller }) func addCollectionItem(
+          name: Text,
+          thumbnailUrl: Text,
+          imageUrl: Text,
+          description: Text,
+          rarity: Text,
+          attributes: [(Text, Text)]
+      ) : async Nat {
+          assert (caller == initializer);
+          collection.addItem(name, thumbnailUrl, imageUrl, description, rarity, attributes)
+      };
+
+      public shared ({ caller }) func updateCollectionItem(
+          id: Nat,
+          name: Text,
+          thumbnailUrl: Text,
+          imageUrl: Text,
+          description: Text,
+          rarity: Text,
+          attributes: [(Text, Text)]
+      ) : async Result.Result<(), Text> {
+          assert (caller == initializer);
+          collection.updateItem(id, name, thumbnailUrl, imageUrl, description, rarity, attributes)
+      };
+
+      public shared ({ caller }) func deleteCollectionItem(id: Nat) : async Result.Result<(), Text> {
+          assert (caller == initializer);
+          collection.deleteItem(id)
+      };
+
+      public query func getCollectionItem(id: Nat) : async ?Collection.Item {
+          collection.getItem(id)
+      };
+
+      public query func getAllCollectionItems() : async [Collection.Item] {
+          collection.getAllItems()
+      };
+
+      public query func getCollectionItemCount() : async Nat {
+          collection.getItemCount()
+      };
+
+      public shared ({ caller }) func setCollectionName(name: Text) : async () {
+          assert (caller == initializer);
+          collection.setCollectionName(name)
+      };
+
+      public shared ({ caller }) func setCollectionDescription(description: Text) : async () {
+          assert (caller == initializer);
+          collection.setCollectionDescription(description)
+      };
+
+      public query func getCollectionName() : async Text {
+          collection.getCollectionName()
+      };
+
+      public query func getCollectionDescription() : async Text {
+          collection.getCollectionDescription()
       };
 
     assetStore.set_streaming_callback(http_request_streaming_callback);
@@ -291,6 +359,10 @@ shared ({ caller = initializer }) actor class Actor() = self {
 
     public query func get_route_cmacs(path : Text) : async [Text] {
         protected_routes_storage.getRouteCmacs(path);
+    };
+
+    public query func listProtectedRoutes() : async [(Text, ProtectedRoutes.ProtectedRoute)] {
+        protected_routes_storage.listProtectedRoutes();
     };
 
 };

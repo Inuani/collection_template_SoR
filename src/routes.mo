@@ -8,7 +8,7 @@ import Route "mo:liminal/Route";
 import Collection "collection";
 
 module Routes {
-   public func routerConfig(canisterId: Text, getFileAsDataUrl: (Text) -> ?Text) : Router.Config {
+   public func routerConfig(canisterId: Text, getFileAsDataUrl: (Text) -> ?Text, collection: Collection.Collection) : Router.Config {
     {
       prefix              = null;
       identityRequirement = null;
@@ -49,16 +49,16 @@ module Routes {
                    let id = switch (Nat.fromText(idText)) {
                        case (?num) num;
                        case null {
-                           let html = Collection.generateNotFoundPage(0);
+                           let html = collection.generateNotFoundPage(0);
                            return ctx.buildResponse(#notFound, #html(html));
                        };
                    };
 
-                   let html = Collection.generateItemPage(id);
+                   let html = collection.generateItemPage(id);
                    ctx.buildResponse(#ok, #html(html))
                }),
                Router.getQuery("/collection", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
-                   let html = Collection.generateCollectionPage();
+                   let html = collection.generateCollectionPage();
                    ctx.buildResponse(#ok, #html(html))
                }),
         Router.getQuery("/{path}",

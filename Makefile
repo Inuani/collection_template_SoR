@@ -64,3 +64,21 @@ file_count:
 
 delete_file:
 	dfx canister call $(CANISTER_NAME) deleteFile '("logo.png")'
+
+# Collection Management
+init_collection:
+	chmod +x scripts/init_collection.sh
+	./scripts/init_collection.sh $(CANISTER_NAME) ic
+
+add_item:
+	chmod +x scripts/add_item.sh
+	./scripts/add_item.sh $(CANISTER_NAME) local
+
+list_items:
+	dfx canister call $(CANISTER_NAME) getAllCollectionItems
+
+item_count:
+	dfx canister call $(CANISTER_NAME) getCollectionItemCount
+
+collection_name:
+	dfx canister call $(CANISTER_NAME) getCollectionName

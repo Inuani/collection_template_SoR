@@ -1,5 +1,10 @@
 import Text "mo:core/Text";
 import Nat "mo:core/Nat";
+import HashMap "mo:base/HashMap";
+import Iter "mo:base/Iter";
+import Array "mo:base/Array";
+import Result "mo:base/Result";
+import Hash "mo:base/Hash";
 
 module {
     // Collection data - you can expand this with more properties
@@ -13,73 +18,180 @@ module {
         attributes: [(Text, Text)]; // key-value pairs for additional attributes
     };
 
-    // Mock data for your collection - replace with your actual data source
-    private let itemCollection: [Item] = [
-        {
-            id = 0;
-            name = "Hoodie #0";
-            thumbnailUrl = "/item0_thumb.webp";
-            imageUrl = "/item0.webp";
-            description = "pull en lien avec l'événement du 30 avril";
-            rarity = "Légendaire";
-            attributes = [("Type", "Sky"), ("Intensity", "Light"), ("", "Calm")];
-        },
-        {
-            id = 1;
-            name = "Hoodie #1";
-            thumbnailUrl = "/item1_thumb.webp";
-            imageUrl = "/item1.webp";
-            description = "The mysterious deep blue of ocean trenches";
-            rarity = "Rare";
-            attributes = [("Type", "Ocean"), ("Aura", "+100"), ("Forme", "Triangle")];
-        },
-        {
-            id = 2;
-            name = "Hoodie #2";
-            thumbnailUrl = "/item2_thumb.webp";
-            imageUrl = "/item2.webp";
-            description = "The intense blue-black of a stormy midnight sky";
-            rarity = "Rare";
-            attributes = [("Type", "Storm"), ("Intensity", "Deep"), ("Mood", "Mysterious")];
-        },
-        {
-            id = 3;
-            name = "Hoodie #3";
-            thumbnailUrl = "/item3_thumb.webp";
-            imageUrl = "/item3.webp";
-            description = "The intense blue-black of a stormy midnight sky";
-            rarity = "Rare";
-            attributes = [("Type", "Storm"), ("Intensity", "Deep"), ("Mood", "Mysterious")];
-        }
-    ];
-
-    // Get a specific item by ID
-    public func getItem(id: Nat): ?Item {
-        if (id < itemCollection.size()) {
-            ?itemCollection[id]
-        } else {
-            null
-        }
+    // State for persistence across upgrades
+    public type State = {
+        var items : [(Nat, Item)];
+        var nextId : Nat;
+        var collectionName : Text;
+        var collectionDescription : Text;
     };
 
-    // Generate HTML page for a specific item
-    public func generateItemPage(id: Nat): Text {
-        switch (getItem(id)) {
-            case (?item) generateItemDetailPage(item);
-            case null generateNotFoundPage(id);
-        }
+    // Initialize state
+    public func init() : State = {
+        var items = [];
+        var nextId = 0;
+        var collectionName = "Collection association LO13TO";
+        var collectionDescription = "Collection de l'Ordre d'Évorev";
     };
 
-    // Generate the main collection page showing all items
-    public func generateCollectionPage(): Text {
-        let itemsGrid = generateItemsGrid();
+    public class Collection(state : State) {
+        // HashMap for efficient lookups
+        private var items = HashMap.fromIter<Nat, Item>(
+            state.items.vals(),
+            state.items.size(),
+            Nat.equal,
+            Hash.hash,
+        );
 
-        "<!DOCTYPE html>
+        private var nextId = state.nextId;
+
+        // Update state for persistence
+        private func updateState() {
+            state.items := Iter.toArray(items.entries());
+            state.nextId := nextId;
+        };
+
+        // ============================================
+        // ADMIN FUNCTIONS (Add/Update/Delete)
+        // ============================================
+
+        // Add a new item to the collection
+        public func addItem(
+            name: Text,
+            thumbnailUrl: Text,
+            imageUrl: Text,
+            description: Text,
+            rarity: Text,
+            attributes: [(Text, Text)]
+        ) : Nat {
+            let id = nextId;
+            let newItem : Item = {
+                id;
+                name;
+                thumbnailUrl;
+                imageUrl;
+                description;
+                rarity;
+                attributes;
+            };
+
+            items.put(id, newItem);
+            nextId += 1;
+            updateState();
+            id
+        };
+
+        // Update an existing item
+        public func updateItem(
+            id: Nat,
+            name: Text,
+            thumbnailUrl: Text,
+            imageUrl: Text,
+            description: Text,
+            rarity: Text,
+            attributes: [(Text, Text)]
+        ) : Result.Result<(), Text> {
+            switch (items.get(id)) {
+                case null {
+                    #err("Item with ID " # Nat.toText(id) # " not found")
+                };
+                case (?_) {
+                    let updatedItem : Item = {
+                        id;
+                        name;
+                        thumbnailUrl;
+                        imageUrl;
+                        description;
+                        rarity;
+                        attributes;
+                    };
+                    items.put(id, updatedItem);
+                    updateState();
+                    #ok()
+                };
+            };
+        };
+
+        // Delete an item
+        public func deleteItem(id: Nat) : Result.Result<(), Text> {
+            switch (items.remove(id)) {
+                case null {
+                    #err("Item with ID " # Nat.toText(id) # " not found")
+                };
+                case (?_) {
+                    updateState();
+                    #ok()
+                };
+            };
+        };
+
+        // ============================================
+        // QUERY FUNCTIONS
+        // ============================================
+
+        // Get a specific item by ID
+        public func getItem(id: Nat): ?Item {
+            items.get(id)
+        };
+
+        // Get all items as an array
+        public func getAllItems(): [Item] {
+            let itemsArray = Iter.toArray(items.vals());
+            // Sort by ID
+            Array.sort(itemsArray, func(a: Item, b: Item) : { #less; #equal; #greater } {
+                if (a.id < b.id) { #less }
+                else if (a.id > b.id) { #greater }
+                else { #equal }
+            })
+        };
+
+        // Get total count of items
+        public func getItemCount(): Nat {
+            items.size()
+        };
+
+        // ============================================
+        // COLLECTION SETTINGS
+        // ============================================
+
+        public func setCollectionName(name: Text) {
+            state.collectionName := name;
+        };
+
+        public func setCollectionDescription(description: Text) {
+            state.collectionDescription := description;
+        };
+
+        public func getCollectionName(): Text {
+            state.collectionName
+        };
+
+        public func getCollectionDescription(): Text {
+            state.collectionDescription
+        };
+
+        // ============================================
+        // HTML GENERATION
+        // ============================================
+
+        // Generate HTML page for a specific item
+        public func generateItemPage(id: Nat): Text {
+            switch (getItem(id)) {
+                case (?item) generateItemDetailPage(item);
+                case null generateNotFoundPage(id);
+            }
+        };
+
+        // Generate the main collection page showing all items
+        public func generateCollectionPage(): Text {
+            let itemsGrid = generateItemsGrid();
+
+            "<!DOCTYPE html>
 <html lang=\"en\">
 <head>
     <meta charset=\"UTF-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-    <title>Collection association LO13TO</title>
+    <title>" # state.collectionName # "</title>
     <style>
         * {
             margin: 0;
@@ -152,34 +264,40 @@ module {
         .rarity-common { background: #e6fffa; color: #047857; }
         .rarity-rare { background: #dbeafe; color: #1e40af; }
         .rarity-epic { background: #faf5ff; color: #7c3aed; }
+        .rarity-légendaire { background: #fef3c7; color: #92400e; }
         .item-description {
             color: #4a5568;
             line-height: 1.5;
+        }
+        .empty-collection {
+            text-align: center;
+            padding: 4rem;
+            color: #718096;
         }
     </style>
 </head>
 <body>
     <div class=\"container\">
-        <h1>Collection de l'Ordre d'Évorev</h1>
+        <h1>" # state.collectionName # "</h1>
         <div class=\"items-grid\">
             " # itemsGrid # "
         </div>
     </div>
 </body>
 </html>"
-    };
+        };
 
-    // Generate individual item page
-    private func generateItemDetailPage(item: Item): Text {
-        let attributesHtml = generateAttributesHtml(item.attributes);
-        let rarityClass = "rarity-" # Text.toLower(item.rarity);
+        // Generate individual item page
+        private func generateItemDetailPage(item: Item): Text {
+            let attributesHtml = generateAttributesHtml(item.attributes);
+            let rarityClass = "rarity-" # Text.toLower(item.rarity);
 
-        "<!DOCTYPE html>
+            "<!DOCTYPE html>
 <html lang=\"en\">
 <head>
     <meta charset=\"UTF-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-    <title>" # item.name # " - Collection association LO13TO</title>
+    <title>" # item.name # " - " # state.collectionName # "</title>
     <style>
         * {
             margin: 0;
@@ -246,6 +364,7 @@ module {
         .rarity-common { background: #e6fffa; color: #047857; }
         .rarity-rare { background: #dbeafe; color: #1e40af; }
         .rarity-epic { background: #faf5ff; color: #7c3aed; }
+        .rarity-légendaire { background: #fef3c7; color: #92400e; }
         .item-description {
             font-size: 1.2rem;
             line-height: 1.6;
@@ -347,38 +466,44 @@ module {
     </div>
 </body>
 </html>"
-    };
-
-    // Generate grid of all items for collection page
-    private func generateItemsGrid(): Text {
-        var html = "";
-        for (item in itemCollection.vals()) {
-            let rarityClass = "rarity-" # Text.toLower(item.rarity);
-            html #= "<a href=\"/item/" # Nat.toText(item.id) # "\" class=\"item-card\">
-                <img src=\"" # item.thumbnailUrl # "\" alt=\"" # item.name # "\" class=\"item-image\">
-                <h3 class=\"item-title\">" # item.name # "</h3>
-                <span class=\"item-rarity " # rarityClass # "\">" # item.rarity # "</span>
-                <p class=\"item-description\">" # item.description # "</p>
-            </a>";
         };
-        html
-    };
 
-    // Generate HTML for attributes
-    private func generateAttributesHtml(attributes: [(Text, Text)]): Text {
-        var html = "";
-        for ((key, value) in attributes.vals()) {
-            html #= "<div class=\"attribute\">
-                <span class=\"attribute-key\">" # key # "</span>
-                <span class=\"attribute-value\">" # value # "</span>
-            </div>";
+        // Generate grid of all items for collection page
+        private func generateItemsGrid(): Text {
+            let allItems = getAllItems();
+
+            if (allItems.size() == 0) {
+                return "<div class=\"empty-collection\"><h2>No items in collection yet</h2><p>Add items to get started!</p></div>";
+            };
+
+            var html = "";
+            for (item in allItems.vals()) {
+                let rarityClass = "rarity-" # Text.toLower(item.rarity);
+                html #= "<a href=\"/item/" # Nat.toText(item.id) # "\" class=\"item-card\">
+                    <img src=\"" # item.thumbnailUrl # "\" alt=\"" # item.name # "\" class=\"item-image\">
+                    <h3 class=\"item-title\">" # item.name # "</h3>
+                    <span class=\"item-rarity " # rarityClass # "\">" # item.rarity # "</span>
+                    <p class=\"item-description\">" # item.description # "</p>
+                </a>";
+            };
+            html
         };
-        html
-    };
 
-    // Generate 404 page for non-existent items
-    public func generateNotFoundPage(id: Nat): Text {
-        "<!DOCTYPE html>
+        // Generate HTML for attributes
+        private func generateAttributesHtml(attributes: [(Text, Text)]): Text {
+            var html = "";
+            for ((key, value) in attributes.vals()) {
+                html #= "<div class=\"attribute\">
+                    <span class=\"attribute-key\">" # key # "</span>
+                    <span class=\"attribute-value\">" # value # "</span>
+                </div>";
+            };
+            html
+        };
+
+        // Generate 404 page for non-existent items
+        public func generateNotFoundPage(id: Nat): Text {
+            "<!DOCTYPE html>
 <html lang=\"en\">
 <head>
     <meta charset=\"UTF-8\">
@@ -433,5 +558,6 @@ module {
     </div>
 </body>
 </html>"
+        };
     };
 }
