@@ -85,7 +85,12 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
         middleware = [
             createNFCProtectionMiddleware(),
             AssetsMiddleware.new(assetMiddlewareConfig),
-            RouterMiddleware.new(Routes.routerConfig(Principal.toText(canisterId), file_storage.getFileAsDataUrl, collection)),
+            RouterMiddleware.new(Routes.routerConfig(
+                Principal.toText(canisterId),
+                file_storage.getFileAsDataUrl,
+                file_storage.getFileChunk,
+                collection
+            )),
         ];
         errorSerializer = Liminal.defaultJsonErrorSerializer;
         candidRepresentationNegotiator = Liminal.defaultCandidRepresentationNegotiator;
