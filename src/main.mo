@@ -14,21 +14,21 @@ import RouterMiddleware "mo:liminal/Middleware/Router";
 import App "mo:liminal/App";
 import HttpContext "mo:liminal/HttpContext";
 
-shared ({ caller = initializer }) actor class Actor() = self {
+shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     transient let canisterId = Principal.fromActor(self);
     type ChunkId = Files.ChunkId;
 
-    stable var assetStableData = HttpAssets.init_stable_store(canisterId, initializer);
+    var assetStableData = HttpAssets.init_stable_store(canisterId, initializer);
     assetStableData := HttpAssets.upgrade_stable_store(assetStableData);
 
-    stable let protectedRoutesState = ProtectedRoutes.init();
+    let protectedRoutesState = ProtectedRoutes.init();
     transient let protected_routes_storage = ProtectedRoutes.RoutesStorage(protectedRoutesState);
 
-    stable let fileStorageState = Files.init();
+    let fileStorageState = Files.init();
     transient let file_storage = Files.FileStorage(fileStorageState);
 
-    stable let collectionState = Collection.init();
+    let collectionState = Collection.init();
     transient let collection = Collection.Collection(collectionState);
 
 
@@ -361,8 +361,8 @@ shared ({ caller = initializer }) actor class Actor() = self {
         protected_routes_storage.getRouteCmacs(path);
     };
 
-    public query func listProtectedRoutes() : async [(Text, ProtectedRoutes.ProtectedRoute)] {
-        protected_routes_storage.listProtectedRoutes();
+    public query func listProtectedRoutesSummary() : async [(Text, Nat)] {
+        protected_routes_storage.listProtectedRoutesSummary();
     };
 
 };

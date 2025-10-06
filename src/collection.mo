@@ -1,10 +1,9 @@
 import Text "mo:core/Text";
 import Nat "mo:core/Nat";
-import HashMap "mo:base/HashMap";
-import Iter "mo:base/Iter";
-import Array "mo:base/Array";
-import Result "mo:base/Result";
-import Hash "mo:base/Hash";
+import Map "mo:core/Map";
+import Iter "mo:core/Iter";
+import Array "mo:core/Array";
+import Result "mo:core/Result";
 
 module {
     // Collection data - you can expand this with more properties
@@ -30,24 +29,22 @@ module {
     public func init() : State = {
         var items = [];
         var nextId = 0;
-        var collectionName = "Collection association LO13TO";
-        var collectionDescription = "Collection de l'Ordre d'Évorev";
+        var collectionName = "Collection d'Évorev";
+        var collectionDescription = "Une collection parmi d'autre ...";
     };
 
     public class Collection(state : State) {
-        // HashMap for efficient lookups
-        private var items = HashMap.fromIter<Nat, Item>(
-            state.items.vals(),
-            state.items.size(),
-            Nat.equal,
-            Hash.hash,
+        // Map for efficient lookups
+        private var items = Map.fromIter<Nat, Item>(
+            state.items.values(),
+            Nat.compare,
         );
 
         private var nextId = state.nextId;
 
         // Update state for persistence
         private func updateState() {
-            state.items := Iter.toArray(items.entries());
+            state.items := Iter.toArray(Map.entries(items));
             state.nextId := nextId;
         };
 
@@ -75,7 +72,7 @@ module {
                 attributes;
             };
 
-            items.put(id, newItem);
+            Map.add(items, Nat.compare, id, newItem);
             nextId += 1;
             updateState();
             id
@@ -91,7 +88,7 @@ module {
             rarity: Text,
             attributes: [(Text, Text)]
         ) : Result.Result<(), Text> {
-            switch (items.get(id)) {
+            switch (Map.get(items, Nat.compare, id)) {
                 case null {
                     #err("Item with ID " # Nat.toText(id) # " not found")
                 };
@@ -105,7 +102,7 @@ module {
                         rarity;
                         attributes;
                     };
-                    items.put(id, updatedItem);
+                    Map.add(items, Nat.compare, id, updatedItem);
                     updateState();
                     #ok()
                 };
@@ -114,7 +111,7 @@ module {
 
         // Delete an item
         public func deleteItem(id: Nat) : Result.Result<(), Text> {
-            switch (items.remove(id)) {
+            switch (Map.take(items, Nat.compare, id)) {
                 case null {
                     #err("Item with ID " # Nat.toText(id) # " not found")
                 };
@@ -131,12 +128,12 @@ module {
 
         // Get a specific item by ID
         public func getItem(id: Nat): ?Item {
-            items.get(id)
+            Map.get(items, Nat.compare, id)
         };
 
         // Get all items as an array
         public func getAllItems(): [Item] {
-            let itemsArray = Iter.toArray(items.vals());
+            let itemsArray = Iter.toArray(Map.values(items));
             // Sort by ID
             Array.sort(itemsArray, func(a: Item, b: Item) : { #less; #equal; #greater } {
                 if (a.id < b.id) { #less }
@@ -147,7 +144,7 @@ module {
 
         // Get total count of items
         public func getItemCount(): Nat {
-            items.size()
+            Map.size(items)
         };
 
         // ============================================

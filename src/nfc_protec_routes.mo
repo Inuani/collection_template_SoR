@@ -1,8 +1,8 @@
-import Text "mo:base/Text";
-import HashMap "mo:base/HashMap";
-import Iter "mo:base/Iter";
-import Array "mo:base/Array";
-import Option "mo:base/Option";
+import Text "mo:core/Text";
+import Map "mo:core/Map";
+import Iter "mo:core/Iter";
+import Array "mo:core/Array";
+import Option "mo:core/Option";
 import Scan "scan";
 
 module {
@@ -21,21 +21,19 @@ module {
     };
 
     public class RoutesStorage(state : State) {
-        private var routes = HashMap.fromIter<Text, ProtectedRoute>(
-            state.protected_routes.vals(),
-            state.protected_routes.size(),
-            Text.equal,
-            Text.hash,
+        private var routes = Map.fromIter<Text, ProtectedRoute>(
+            state.protected_routes.values(),
+            Text.compare,
         );
 
         public func addProtectedRoute(path : Text) : Bool {
-            if (Option.isNull(routes.get(path))) {
+            if (Option.isNull(Map.get(routes, Text.compare, path))) {
                 let new_route : ProtectedRoute = {
                     path;
                     cmacs_ = [];
                     scan_count_ = 0;
                 };
-                routes.put(path, new_route);
+                Map.add(routes, Text.compare, path, new_route);
                 updateState();
                 true;
             } else {
@@ -44,9 +42,11 @@ module {
         };
 
         public func updateRouteCmacs(path : Text, new_cmacs : [Text]) : Bool {
-            switch (routes.get(path)) {
+            switch (Map.get(routes, Text.compare, path)) {
                 case (?existing) {
-                    routes.put(
+                    Map.add(
+                        routes,
+                        Text.compare,
                         path,
                         {
                             path = existing.path;
@@ -64,13 +64,15 @@ module {
         };
 
         public func appendRouteCmacs(path : Text, new_cmacs : [Text]) : Bool {
-            switch (routes.get(path)) {
+            switch (Map.get(routes, Text.compare, path)) {
                 case (?existing) {
-                    routes.put(
+                    Map.add(
+                        routes,
+                        Text.compare,
                         path,
                         {
                             path = existing.path;
-                            cmacs_ = Array.append(existing.cmacs_, new_cmacs);
+                            cmacs_ = Array.concat(existing.cmacs_, new_cmacs);
                             scan_count_ = existing.scan_count_;
                         },
                     );
@@ -84,11 +86,11 @@ module {
         };
 
         public func getRoute(path : Text) : ?ProtectedRoute {
-            routes.get(path);
+            Map.get(routes, Text.compare, path);
         };
 
         public func getRouteCmacs(path : Text) : [Text] {
-            switch (routes.get(path)) {
+            switch (Map.get(routes, Text.compare, path)) {
                 case (?route) {
                     route.cmacs_;
                 };
@@ -97,9 +99,11 @@ module {
         };
 
         public func updateScanCount(path : Text, new_count : Nat) : Bool {
-            switch (routes.get(path)) {
+            switch (Map.get(routes, Text.compare, path)) {
                 case (?existing) {
-                    routes.put(
+                    Map.add(
+                        routes,
+                        Text.compare,
                         path,
                         {
                             path = existing.path;
@@ -117,7 +121,7 @@ module {
         };
 
         public func verifyRouteAccess(path : Text, url : Text) : Bool {
-            switch (routes.get(path)) {
+            switch (Map.get(routes, Text.compare, path)) {
                 case (?route) {
                     let counter = Scan.scan(route.cmacs_, url, route.scan_count_);
                     if (counter > 0) {
@@ -134,12 +138,23 @@ module {
         };
 
         public func listProtectedRoutes() : [(Text, ProtectedRoute)] {
-            Iter.toArray(routes.entries());
+            Iter.toArray(Map.entries(routes));
+        };
+
+        // Returns only path and scan count, without cmacs
+        public func listProtectedRoutesSummary() : [(Text, Nat)] {
+            let entries = Iter.toArray(Map.entries(routes));
+            Array.map<(Text, ProtectedRoute), (Text, Nat)>(
+                entries,
+                func((path, route)) : (Text, Nat) {
+                    (path, route.scan_count_)
+                }
+            )
         };
 
         public func isProtectedRoute(url : Text) : Bool {
             Option.isSome(Array.find<(Text, ProtectedRoute)>(
-                Iter.toArray(routes.entries()),
+                Iter.toArray(Map.entries(routes)),
                 func((path, _)) : Bool {
                     Text.contains(url, #text path);
                 },
@@ -147,7 +162,7 @@ module {
         };
 
         private func updateState() {
-            state.protected_routes := Iter.toArray(routes.entries());
+            state.protected_routes := Iter.toArray(Map.entries(routes));
         };
 
         public func getState() : State {

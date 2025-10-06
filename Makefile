@@ -36,7 +36,7 @@ Isync:
 	icx-asset --replica https://ic0.app --pem ~/.config/dfx/identity/raygen/identity.pem sync $(CANISTER_ID) ./public
 
 protect:
-	python3 scripts/setup_route.py $(CANISTER_ID) test
+	python3 scripts/setup_route.py $(CANISTER_ID) item3.webp
 
 protect_ic:
 	python3 scripts/setup_route.py $(CANISTER_ID) item/3 --ic --random-key
@@ -68,7 +68,7 @@ delete_file:
 # Collection Management
 init_collection:
 	chmod +x scripts/init_collection.sh
-	./scripts/init_collection.sh $(CANISTER_NAME) ic
+	./scripts/init_collection.sh $(CANISTER_NAME) local
 
 add_item:
 	chmod +x scripts/add_item.sh

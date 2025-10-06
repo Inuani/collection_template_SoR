@@ -4,7 +4,7 @@ import RouteContext "mo:liminal/RouteContext";
 import Liminal      "mo:liminal";
 import Text "mo:core/Text";
 import Nat "mo:core/Nat";
-import Route "mo:liminal/Route";
+// import Route "mo:liminal/Route";
 import Collection "collection";
 
 module Routes {
