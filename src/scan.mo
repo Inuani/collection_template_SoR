@@ -1,16 +1,16 @@
-import Text "mo:base/Text";
-import Nat "mo:base/Nat";
-import Array "mo:base/Array";
-import Iter "mo:base/Iter";
-import Char "mo:base/Char";
-import Nat8 "mo:base/Nat8";
-import Nat32 "mo:base/Nat32";
+import Text "mo:core/Text";
+import Nat "mo:core/Nat";
+import Array "mo:core/Array";
+import Iter "mo:core/Iter";
+import Char "mo:core/Char";
+import Nat8 "mo:core/Nat8";
+import Nat32 "mo:core/Nat32";
 import Sha "sha";
 
 module {
     public func hexToNat(hexString: Text) : Nat {
         var result : Nat = 0;
-        for (char in Text.toIter(hexString)) {
+        for (char in hexString.chars()) {
             if (Char.toNat32(char) >= Char.toNat32('0') and Char.toNat32(char) <= Char.toNat32( '9')) {
                 result := result * 16 + (Nat32.toNat(Char.toNat32(char)) - 48);
             }
@@ -34,15 +34,15 @@ module {
         else if (indexStart >= value.size()) {
             return "";
         };
-        
+
         var indexEndValid = indexEnd;
         if (indexEnd > value.size()) {
             indexEndValid := value.size();
         };
 
         var result : Text = "";
-        var iter = Iter.toArray<Char>(Text.toIter(value));
-        for (index in Iter.range(indexStart, indexEndValid - 1)) {
+        var iter = Iter.toArray<Char>(value.chars());
+        for (index in Nat.rangeInclusive(indexStart, indexEndValid - 1)) {
             result := result # Char.toText(iter[index]);
         };
 
@@ -71,26 +71,25 @@ module {
         if (cmac_query.size() != 2 or counter_query.size() != 2 or cmac_query[0] != "cmac" or counter_query[0] != "ctr") {
             return 0;
         };
-        
+
         var counter = hexToNat(counter_query[1]);
 
-        let sha = Sha.sha256(Array.map(Text.toArray(cmac_query[1]), func (c : Char) : Nat8 { 
+        let sha = Sha.sha256(Array.map(Text.toArray(cmac_query[1]), func (c : Char) : Nat8 {
             Nat8.fromNat(Nat32.toNat(Char.toNat32(c)))
         }));
-    
+
         if (counter >= cmacs.size() or counter <= scan_count) {
             return 0;
         };
 
         var res = counter;
 
-        for (i in Iter.range(0, sha.size() - 1)) {
+        for (i in Nat.rangeInclusive(0, sha.size() - 1)) {
             if (Nat8.toNat(sha[i]) != hexToNat(subText(cmacs[counter - 1], i * 2, i * 2 + 2))) {
                 res := 0;
             };
         };
-   
+
         return res;
     };
 }
-

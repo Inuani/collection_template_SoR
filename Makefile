@@ -36,7 +36,7 @@ Isync:
 	icx-asset --replica https://ic0.app --pem ~/.config/dfx/identity/raygen/identity.pem sync $(CANISTER_ID) ./public
 
 protect:
-	python3 scripts/setup_route.py $(CANISTER_ID) item3.webp
+	python3 scripts/setup_route.py $(CANISTER_ID) item/3
 
 protect_ic:
 	python3 scripts/setup_route.py $(CANISTER_ID) item/3 --ic --random-key
@@ -51,10 +51,10 @@ delete_asset:
 	dfx canister call --ic $(CANISTER_ID) delete_asset '(record { key = "/item1_thumb.webp" })'
 
 upload_file:
-	./scripts/upload_file.sh logo.png "Logo" "Elie" $(CANISTER_NAME) $(DFX_NETWORK)
+	./scripts/upload_file.sh equipe.png "ekip" "Elie" $(CANISTER_NAME) $(DFX_NETWORK)
 
 download_file:
-	./scripts/download_file.sh "equipe" img_downloaded.png $(CANISTER_NAME) $(DFX_NETWORK)
+	./scripts/download_file.sh "ekip" img_downloaded.png $(CANISTER_NAME) $(DFX_NETWORK)
 
 list_files:
 	dfx canister call $(CANISTER_NAME) listFiles

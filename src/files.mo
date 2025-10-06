@@ -1,14 +1,14 @@
-import Text "mo:base/Text";
-import Array "mo:base/Array";
-import HashMap "mo:base/HashMap";
-import Result "mo:base/Result";
-import Iter "mo:base/Iter";
-import Buffer "mo:base/Buffer";
-import Nat "mo:base/Nat";
-import Option "mo:base/Option";
-import Nat32 "mo:base/Nat32";
-import Nat8 "mo:base/Nat8";
-import Char "mo:base/Char";
+import Text "mo:core/Text";
+import Array "mo:core/Array";
+import Map "mo:core/Map";
+import Result "mo:core/Result";
+import Iter "mo:core/Iter";
+import List "mo:core/List";
+import Nat "mo:core/Nat";
+import Option "mo:core/Option";
+import Nat32 "mo:core/Nat32";
+import Nat8 "mo:core/Nat8";
+import Char "mo:core/Char";
 
 module {
 
@@ -34,26 +34,24 @@ module {
     public class FileStorage(state : State) {
         private let maxFiles : Nat = 10;
         private let chunkSize : Nat = 2000000;
-        private var buffer = Buffer.Buffer<Nat8>(0);
-        private var storedFiles : HashMap.HashMap<Text, StoredFile> = HashMap.fromIter<Text, StoredFile>(
-            state.storedFiles.vals(),
-            state.storedFiles.size(),
-            Text.equal,
-            Text.hash,
+        private var buffer = List.empty<Nat8>();
+        private var storedFiles = Map.fromIter<Text, StoredFile>(
+            state.storedFiles.values(),
+            Text.compare,
         );
 
         public func upload(chunk : [Nat8]) {
             for (byte in chunk.vals()) {
-                buffer.add(byte);
+                List.add(buffer, byte);
             };
         };
 
         public func uploadFinalize(title : Text, artist : Text, contentType : Text) : Result.Result<Text, Text> {
-            if (storedFiles.size() >= maxFiles and Option.isNull(storedFiles.get(title))) {
+            if (Map.size(storedFiles) >= maxFiles and Option.isNull(Map.get(storedFiles, Text.compare, title))) {
                 return #err("Maximum number of files reached");
             };
 
-            let data = Buffer.toArray(buffer);
+            let data = List.toArray(buffer);
             let totalChunks = Nat.max(1, (data.size() + chunkSize) / chunkSize);
             var chunks : [FileChunk] = [];
             var i = 0;
@@ -61,11 +59,13 @@ module {
             while (i < data.size()) {
                 let end = Nat.min(i + chunkSize, data.size());
                 let chunk = Array.tabulate<Nat8>(end - i, func(j) = data[i + j]);
-                chunks := Array.append(chunks, [chunk]);
+                chunks := Array.concat(chunks, [chunk]);
                 i += chunkSize;
             };
 
-            storedFiles.put(
+            Map.add(
+                storedFiles,
+                Text.compare,
                 title,
                 {
                     title;
@@ -76,8 +76,8 @@ module {
                 },
             );
 
-            state.storedFiles := Iter.toArray(storedFiles.entries());
-            buffer.clear();
+            state.storedFiles := Iter.toArray(Map.entries(storedFiles));
+            List.clear(buffer);
             #ok("Upload successful");
         };
 
@@ -88,7 +88,7 @@ module {
             title : Text;
             artist : Text;
         } {
-            switch (storedFiles.get(title)) {
+            switch (Map.get(storedFiles, Text.compare, title)) {
                 case (null) { null };
                 case (?file) {
                     if (chunkId >= file.data.size()) return null;
@@ -104,7 +104,7 @@ module {
         };
 
         public func listFiles() : [(Text, Text, Text)] {
-            let entries = Iter.toArray(storedFiles.entries());
+            let entries = Iter.toArray(Map.entries(storedFiles));
             Array.map<(Text, StoredFile), (Text, Text, Text)>(
                 entries,
                 func((title, file)) = (title, file.artist, file.contentType),
@@ -112,28 +112,28 @@ module {
         };
 
         public func deleteFile(title : Text) : Bool {
-            switch (storedFiles.remove(title)) {
+            switch (Map.take(storedFiles, Text.compare, title)) {
                 case (null) { false };
                 case (?_) {
-                    state.storedFiles := Iter.toArray(storedFiles.entries());
+                    state.storedFiles := Iter.toArray(Map.entries(storedFiles));
                     true;
                 };
             };
         };
 
         public func getStoredFileCount() : Nat {
-            storedFiles.size();
+            Map.size(storedFiles);
         };
 
         // Get file as base64 data URL for embedding in HTML
         public func getFileAsDataUrl(title : Text) : ?Text {
-            switch (storedFiles.get(title)) {
+            switch (Map.get(storedFiles, Text.compare, title)) {
                 case (null) { null };
                 case (?file) {
                     // Reconstruct full file from chunks
                     var allBytes : [Nat8] = [];
                     for (chunk in file.data.vals()) {
-                        allBytes := Array.append(allBytes, chunk);
+                        allBytes := Array.concat(allBytes, chunk);
                     };
 
                     // Convert to base64
