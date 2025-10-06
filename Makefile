@@ -51,7 +51,7 @@ delete_asset:
 	dfx canister call --ic $(CANISTER_ID) delete_asset '(record { key = "/item1_thumb.webp" })'
 
 upload_file:
-	./scripts/upload_file.sh equipe.png "ekip" "Elie" $(CANISTER_NAME) $(DFX_NETWORK)
+	./scripts/upload_file.sh certificat_1.webp "certificat_1" "Elie" $(CANISTER_NAME) $(DFX_NETWORK)
 
 download_file:
 	./scripts/download_file.sh "ekip" img_downloaded.png $(CANISTER_NAME) $(DFX_NETWORK)
