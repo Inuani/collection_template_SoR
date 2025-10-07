@@ -88,7 +88,6 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
             AssetsMiddleware.new(assetMiddlewareConfig),
             RouterMiddleware.new(Routes.routerConfig(
                 Principal.toText(canisterId),
-                file_storage.getFileAsDataUrl,
                 file_storage.getFileChunk,
                 collection
             )),
