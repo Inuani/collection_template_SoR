@@ -13,6 +13,7 @@ import Result "mo:core/Result";
 import RouterMiddleware "mo:liminal/Middleware/Router";
 import App "mo:liminal/App";
 import HttpContext "mo:liminal/HttpContext";
+import InvalidScan "invalid_scan";
 
 shared ({ caller = initializer }) persistent actor class Actor() = self {
 
@@ -66,10 +67,10 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                             {
                                 return
                                 {
-                                    statusCode = 403;
-                                    headers = [("Content-Type", "text/html")];
-                                    body = ?Text.encodeUtf8("Access Denied - Invalid NFC");
-                                    streamingStrategy = null;
+                                  statusCode = 403;
+                                  headers = [("Content-Type", "text/html")];
+                                  body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage());
+                                  streamingStrategy = null;
                                 };
                             };
                         };
