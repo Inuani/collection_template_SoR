@@ -1,8 +1,11 @@
 // src/invalid_scan.mo
+import Theme "theme";
+
 module {
 
-
-    public func generateInvalidScanPage() : Text {
+    public func generateInvalidScanPage(themeManager: Theme.ThemeManager) : Text {
+        let primary = themeManager.getPrimary();
+        let secondary = themeManager.getSecondary();
         "<!DOCTYPE html>
 <html lang=\"fr\">
 <head>
@@ -17,7 +20,7 @@ module {
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: white;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -57,7 +60,7 @@ module {
             line-height: 1.6;
         }
         .back-button {
-            background: #0040a7;
+            background: " # primary # ";
             color: white;
             padding: 12px 24px;
             border: none;
@@ -71,12 +74,12 @@ module {
             margin: 0 10px;
         }
         .back-button:hover {
-            background: #003080;
+            opacity: 0.9;
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,64,167,0.3);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
         .secondary-button {
-            background: #718096;
+            background: " # primary # ";
             color: white;
             padding: 12px 24px;
             border: none;
@@ -90,20 +93,20 @@ module {
             margin: 0 10px;
         }
         .secondary-button:hover {
-            background: #4a5568;
+            opacity: 0.9;
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(113,128,150,0.3);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
     </style>
 </head>
 <body>
-    <div class=\"error-container\">
-        <div class=\"error-icon\">
+    <div class=\"error-container\" style=\"border: 3px solid " # secondary # ";\">
+        <div class=\"error-icon\" style=\"border: 2px solid " # secondary # ";\">
             <svg fill=\"#e53e3e\" width=\"40\" height=\"40\" viewBox=\"0 0 20 20\">
                 <path fill-rule=\"evenodd\" d=\"M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z\" clip-rule=\"evenodd\"/>
             </svg>
         </div>
-        <h1 class=\"error-title\">Scan Invalide</h1>
+        <h1 class=\"error-title\" style=\"color: " # secondary # ";\">Scan Invalide</h1>
         <p class=\"error-message\">
             Désolé, ce lien n'est pas valide ou a expiré.
             <br><br>

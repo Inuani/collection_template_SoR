@@ -14,6 +14,7 @@ import RouterMiddleware "mo:liminal/Middleware/Router";
 import App "mo:liminal/App";
 import HttpContext "mo:liminal/HttpContext";
 import InvalidScan "invalid_scan";
+import Theme "theme";
 
 shared ({ caller = initializer }) persistent actor class Actor() = self {
 
@@ -31,6 +32,9 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     let collectionState = Collection.init();
     transient let collection = Collection.Collection(collectionState);
+
+    let themeState = Theme.init();
+    transient let themeManager = Theme.ThemeManager(themeState);
 
 
     transient let setPermissions : HttpAssets.SetPermissions = {
@@ -69,7 +73,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                                 {
                                   statusCode = 403;
                                   headers = [("Content-Type", "text/html")];
-                                  body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage());
+                                  body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage(themeManager));
                                   streamingStrategy = null;
                                 };
                             };
@@ -89,7 +93,8 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
             RouterMiddleware.new(Routes.routerConfig(
                 Principal.toText(canisterId),
                 file_storage.getFileChunk,
-                collection
+                collection,
+                themeManager
             )),
         ];
         errorSerializer = Liminal.defaultJsonErrorSerializer;
@@ -368,6 +373,24 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     public query func listProtectedRoutesSummary() : async [(Text, Nat)] {
         protected_routes_storage.listProtectedRoutesSummary();
+    };
+
+    // ============================================
+    // THEME MANAGEMENT FUNCTIONS (Admin Only)
+    // ============================================
+
+    public shared ({ caller }) func setTheme(primary: Text, secondary: Text) : async Theme.Theme {
+        assert (caller == initializer);
+        themeManager.setTheme(primary, secondary)
+    };
+
+    public query func getTheme() : async Theme.Theme {
+        themeManager.getTheme()
+    };
+
+    public shared ({ caller }) func resetTheme() : async Theme.Theme {
+        assert (caller == initializer);
+        themeManager.resetTheme()
     };
 
 };

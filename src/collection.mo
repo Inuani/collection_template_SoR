@@ -4,6 +4,7 @@ import Map "mo:core/Map";
 import Iter "mo:core/Iter";
 import Array "mo:core/Array";
 import Result "mo:core/Result";
+import Theme "theme";
 
 module {
     // Collection data - you can expand this with more properties
@@ -172,16 +173,18 @@ module {
         // ============================================
 
         // Generate HTML page for a specific item
-        public func generateItemPage(id: Nat): Text {
+        public func generateItemPage(id: Nat, themeManager: Theme.ThemeManager): Text {
             switch (getItem(id)) {
-                case (?item) generateItemDetailPage(item);
-                case null generateNotFoundPage(id);
+                case (?item) generateItemDetailPage(item, themeManager);
+                case null generateNotFoundPage(id, themeManager);
             }
         };
 
         // Generate the main collection page showing all items
-        public func generateCollectionPage(): Text {
+        public func generateCollectionPage(themeManager: Theme.ThemeManager): Text {
             let itemsGrid = generateItemsGrid();
+            let primary = themeManager.getPrimary();
+            let secondary = themeManager.getSecondary();
 
             "<!DOCTYPE html>
 <html lang=\"en\">
@@ -205,10 +208,11 @@ module {
             max-width: 1200px;
             margin: 0 auto;
             padding: 2rem;
+            border-top: 4px solid " # secondary # ";
         }
         h1 {
             text-align: center;
-            color: #333;
+            color: " # primary # ";
             font-size: 3rem;
             margin-bottom: 2rem;
         }
@@ -226,6 +230,7 @@ module {
             transition: transform 0.3s ease, box-shadow 0.3s ease;
             text-decoration: none;
             color: inherit;
+            border-left: 3px solid " # secondary # ";
         }
         .item-card:hover {
             transform: translateY(-5px);
@@ -285,9 +290,11 @@ module {
         };
 
         // Generate individual item page
-        private func generateItemDetailPage(item: Item): Text {
+        private func generateItemDetailPage(item: Item, themeManager: Theme.ThemeManager): Text {
             let attributesHtml = generateAttributesHtml(item.attributes);
             let rarityClass = "rarity-" # Text.toLower(item.rarity);
+            let primary = themeManager.getPrimary();
+            let secondary = themeManager.getSecondary();
 
             "<!DOCTYPE html>
 <html lang=\"en\">
@@ -315,11 +322,12 @@ module {
             border-radius: 20px;
             padding: 2rem;
             box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+            border-top: 4px solid " # secondary # ";
         }
         .back-link {
             display: inline-block;
             margin-bottom: 2rem;
-            color: #667eea;
+            color: " # primary # ";
             text-decoration: none;
             font-weight: 500;
         }
@@ -400,7 +408,7 @@ module {
         }
         .authentication-status {
             background: #f0fff4;
-            border: 2px solid #68d391;
+            border: 2px solid " # secondary # ";
             border-radius: 10px;
             padding: 1.5rem;
             margin: 2rem 0;
@@ -409,7 +417,7 @@ module {
         .auth-title {
             font-size: 1.2rem;
             font-weight: 600;
-            color: #2f855a;
+            color: " # secondary # ";
             margin-bottom: 0.5rem;
             display: flex;
             align-items: center;
@@ -445,7 +453,7 @@ module {
 
         <div class=\"authentication-status\">
             <div class=\"auth-title\">
-                <svg class=\"auth-icon\" fill=\"#2f855a\" viewBox=\"0 0 20 20\">
+                <svg class=\"auth-icon\" fill=\"" # secondary # "\" viewBox=\"0 0 20 20\">
                     <path d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\"/>
                 </svg>
                 Authentification Vérifiée
@@ -499,7 +507,10 @@ module {
         };
 
         // Generate 404 page for non-existent items
-        public func generateNotFoundPage(id: Nat): Text {
+        public func generateNotFoundPage(id: Nat, themeManager: Theme.ThemeManager): Text {
+            let primary = themeManager.getPrimary();
+            let secondary = themeManager.getSecondary();
+
             "<!DOCTYPE html>
 <html lang=\"en\">
 <head>
@@ -518,15 +529,16 @@ module {
             text-align: center;
         }
         .error-container {
-            background: rgba(255,255,255,0.1);
-            backdrop-filter: blur(10px);
+            background: white;
             border-radius: 20px;
             padding: 3rem;
             box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+            border: 3px solid " # secondary # ";
         }
         h1 {
             font-size: 3rem;
             margin-bottom: 1rem;
+            color: " # primary # ";
         }
         p {
             font-size: 1.2rem;
@@ -534,15 +546,15 @@ module {
             opacity: 0.8;
         }
         a {
-            color: #333;
+            color: white;
             text-decoration: none;
-            background: #f0f0f0;
+            background: " # primary # ";
             padding: 1rem 2rem;
             border-radius: 10px;
             transition: all 0.3s ease;
         }
         a:hover {
-            background: #e0e0e0;
+            opacity: 0.9;
             transform: translateY(-2px);
         }
     </style>

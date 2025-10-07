@@ -8,6 +8,7 @@ import Blob "mo:core/Blob";
 // import Route "mo:liminal/Route";
 import Collection "collection";
 import Home "home";
+import Theme "theme";
 
 module Routes {
    public func routerConfig(
@@ -19,7 +20,8 @@ module Routes {
            title : Text;
            artist : Text;
        },
-       collection: Collection.Collection
+       collection: Collection.Collection,
+       themeManager: Theme.ThemeManager
    ) : Router.Config {
     {
       prefix              = null;
@@ -27,7 +29,7 @@ module Routes {
       routes = [
         Router.getQuery("/",
           func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
-            Home.homePage(ctx, canisterId, collection.getCollectionName())
+            Home.homePage(ctx, canisterId, collection.getCollectionName(), themeManager)
           }
         ),
         Router.getQuery("/item/{id}", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
@@ -36,16 +38,16 @@ module Routes {
                    let id = switch (Nat.fromText(idText)) {
                        case (?num) num;
                        case null {
-                           let html = collection.generateNotFoundPage(0);
+                           let html = collection.generateNotFoundPage(0, themeManager);
                            return ctx.buildResponse(#notFound, #html(html));
                        };
                    };
 
-                   let html = collection.generateItemPage(id);
+                   let html = collection.generateItemPage(id, themeManager);
                    ctx.buildResponse(#ok, #html(html))
                }),
                Router.getQuery("/collection", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
-                   let html = collection.generateCollectionPage();
+                   let html = collection.generateCollectionPage(themeManager);
                    ctx.buildResponse(#ok, #html(html))
                }),
 
