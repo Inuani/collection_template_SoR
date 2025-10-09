@@ -92,7 +92,18 @@ module Routes {
             switch (getFileChunk(filename, 0)) {
                 case (?fileInfo) {
                     // Extract item number from filename (e.g., certificat_0 -> 0)
-                    let itemNumber = Text.replace(filename, #text("certificat_"), "");
+                    let itemNumberText = Text.replace(filename, #text("certificat_"), "");
+
+                    // Get item name from collection
+                    let itemDisplay = switch (Nat.fromText(itemNumberText)) {
+                        case (?itemId) {
+                            switch (collection.getItem(itemId)) {
+                                case (?item) item.name;
+                                case null itemNumberText;
+                            };
+                        };
+                        case null itemNumberText;
+                    };
 
                     // For single chunk files, display in HTML page with certificate text
                     if (fileInfo.totalChunks == 1) {
@@ -114,8 +125,8 @@ module Routes {
                             # "</style>"
                             # "</head><body>"
                             # "<div class='container'>"
-                            # "<a href='/item/" # itemNumber # "' class='back-link'>Retour à la collection</a>"
-                            # "<div class='certificate-text'>Scan valide - certificat d'authenticité pour l'item " # itemNumber # " :</div>"
+                            # "<a href='/item/" # itemNumberText # "' class='back-link'>Retour à la collection</a>"
+                            # "<div class='certificate-text'>Scan valide - certificat d'authenticité pour l'item " # itemDisplay # " :</div>"
                             # "<div class='media-container'><div id='media'></div></div>"
                             # "</div>"
                             # "<script>"
@@ -167,8 +178,8 @@ module Routes {
                             # "</style>"
                             # "</head><body>"
                             # "<div class='container'>"
-                            # "<a href='/item/" # itemNumber # "' class='back-link'>Retour à la collection</a>"
-                            # "<div class='certificate-text'>Scan valide - certificat d'authenticité pour l'item " # itemNumber # " :</div>"
+                            # "<a href='/item/" # itemNumberText # "' class='back-link'>Retour à la collection</a>"
+                            # "<div class='certificate-text'>Scan valide - certificat d'authenticité pour l'item " # itemDisplay # " :</div>"
                             # "<div class='media-container'><div id='media'></div></div>"
                             # "</div>"
                             # "<script>"
