@@ -88,7 +88,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     transient let app = Liminal.App({
         middleware = [
-            createNFCProtectionMiddleware(),
+            // createNFCProtectionMiddleware(),
             AssetsMiddleware.new(assetMiddlewareConfig),
             RouterMiddleware.new(Routes.routerConfig(
                 Principal.toText(canisterId),
