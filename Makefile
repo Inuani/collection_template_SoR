@@ -36,10 +36,10 @@ Isync:
 	icx-asset --replica https://ic0.app --pem ~/.config/dfx/identity/raygen/identity.pem sync $(CANISTER_ID) ./public
 
 protect:
-	python3 scripts/setup_route.py $(CANISTER_ID) item/1
+	python3 scripts/setup_route.py $(CANISTER_ID) files/certificat_0
 
 protect_ic:
-	python3 scripts/setup_route.py $(CANISTER_ID) item/3 --ic --random-key
+	python3 scripts/setup_route.py $(CANISTER_ID) files/certificat_1 --ic --random-key
 
 reinstall:
 	dfx deploy $(CANISTER_NAME) --mode reinstall
@@ -51,7 +51,7 @@ delete_asset:
 	dfx canister call --ic $(CANISTER_ID) delete_asset '(record { key = "/item1_thumb.webp" })'
 
 upload_file:
-	./scripts/upload_file.sh certificats/equipe.png "ekip" "Elie" $(CANISTER_NAME) $(DFX_NETWORK)
+	./scripts/upload_file.sh certificats/certificat_0.webp "certificat_0" "Élie" $(CANISTER_NAME) $(DFX_NETWORK)
 
 download_file:
 	./scripts/download_file.sh "ekip" img_downloaded.png $(CANISTER_NAME) $(DFX_NETWORK)
@@ -71,8 +71,7 @@ init_collection:
 	./scripts/init_collection.sh $(CANISTER_NAME) local
 
 add_item:
-	chmod +x scripts/add_item.sh
-	./scripts/add_item.sh $(CANISTER_NAME) local
+	dfx canister call collection --ic addCollectionItem '("Bleu #6", "/thumb_6.webp", "/item_6.webp", "fermeture dorée", "Rare", vec {record{"Aura"; "+100"}})'
 
 list_items:
 	dfx canister call $(CANISTER_NAME) getAllCollectionItems
@@ -85,3 +84,9 @@ collection_name:
 
 change_theme:
 	dfx canister call $(CANISTER_NAME) setTheme '("#1E3A8A", "#3B82F6")'
+
+check_protect_routes:
+	dfx canister call --ic $(CANISTER_NAME) listProtectedRoutesSummary
+
+collection_name_update:
+	dfx canister call collection --ic setCollectionName '("Collection Ordre d'\''Évorev")'

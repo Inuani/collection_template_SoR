@@ -406,33 +406,7 @@ module {
             color: #2d3748;
             font-weight: 600;
         }
-        .authentication-status {
-            background: #f0fff4;
-            border: 2px solid " # secondary # ";
-            border-radius: 10px;
-            padding: 1.5rem;
-            margin: 2rem 0;
-            text-align: center;
-        }
-        .auth-title {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: " # secondary # ";
-            margin-bottom: 0.5rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .auth-icon {
-            width: 20px;
-            height: 20px;
-            margin-right: 8px;
-        }
-        .auth-message {
-            color: #276749;
-            font-size: 1rem;
-            line-height: 1.5;
-        }
+
     </style>
 </head>
 <body>
@@ -451,21 +425,10 @@ module {
 
         <p class=\"item-description\">" # item.description # "</p>
 
-        <div class=\"authentication-status\">
-            <div class=\"auth-title\">
-                <svg class=\"auth-icon\" fill=\"" # secondary # "\" viewBox=\"0 0 20 20\">
-                    <path d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\"/>
-                </svg>
-                Authentification Vérifiée
-            </div>
-            <p class=\"auth-message\">
-                Cet article est authentique et vérifié.
-                <br>ID de vérification: #" # Nat.toText(item.id) # "-" # item.rarity # "
-            </p>
-        </div>
+
 
         <div class=\"attributes\">
-            <h3 class=\"attributes-title\">Attributes</h3>
+            <h3 class=\"attributes-title\">Attributs</h3>
             " # attributesHtml # "
         </div>
     </div>
