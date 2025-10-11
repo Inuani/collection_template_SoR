@@ -210,11 +210,21 @@ module {
             padding: 2rem;
             border-top: 4px solid " # secondary # ";
         }
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .logo {
+            width: 80px;
+            height: auto;
+        }
         h1 {
-            text-align: center;
             color: " # primary # ";
             font-size: 3rem;
-            margin-bottom: 2rem;
+            margin: 0;
         }
         .items-grid {
             display: grid;
@@ -280,7 +290,10 @@ module {
 </head>
 <body>
     <div class=\"container\">
-        <h1>" # state.collectionName # "</h1>
+        <div class=\"header\">
+            <img src=\"/logo.webp\" alt=\"Logo\" class=\"logo\">
+            <h1>" # state.collectionName # "</h1>
+        </div>
         <div class=\"items-grid\">
             " # itemsGrid # "
         </div>
