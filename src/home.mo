@@ -11,7 +11,6 @@ module Home {
         themeManager: Theme.ThemeManager
     ) : Liminal.HttpResponse {
         let primary = themeManager.getPrimary();
-        let secondary = themeManager.getSecondary();
 
         let testHtml = "<!DOCTYPE html>"
               # "<html lang='fr'>"
@@ -30,7 +29,7 @@ module Home {
                             # "        </a>"
                             # "    </div>"
               # "    <div style='text-align: center; margin-bottom: 20px;'>"
-              # "        <img src='/logo.webp' alt='logo collection' style='width: 300px; height: auto; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto;'/>"
+              # "        <img src='/logo.webp' alt='logo collection' style='width: 150px; height: auto; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto;'/>"
               # "        <h1 style='color: " # primary # "; margin: 0;'>" # collectionName # "</h1>"
               # "    </div>"
               # "</body>"

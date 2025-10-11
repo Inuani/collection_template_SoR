@@ -48,7 +48,7 @@ ls:
 	icx-asset --replica https://ic0.app --pem ~/.config/dfx/identity/raygen/identity.pem ls $(CANISTER_ID)
 
 delete_asset:
-	dfx canister call --ic $(CANISTER_ID) delete_asset '(record { key = "/item1_thumb.webp" })'
+	dfx canister call --ic $(CANISTER_ID) delete_asset '(record { key = "/logo.webp" })'
 
 upload_file:
 	./scripts/upload_file.sh certificats/certificat_0.webp "certificat_0" "Élie" $(CANISTER_NAME) $(DFX_NETWORK)
