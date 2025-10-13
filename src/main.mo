@@ -16,6 +16,8 @@ import HttpContext "mo:liminal/HttpContext";
 import InvalidScan "invalid_scan";
 import Theme "theme";
 import Buttons "buttons";
+import NFCMeeting "nfc_meeting";
+import Nat16 "mo:core/Nat16";
 
 shared ({ caller = initializer }) persistent actor class Actor() = self {
 
@@ -55,7 +57,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     func createNFCProtectionMiddleware() : App.Middleware {
         {
-            name = "NFC Protection";
+            name = "NFC Protection with Meeting System";
             handleQuery = func(context : HttpContext.HttpContext, next : App.Next) : App.QueryResult {
                 if (protected_routes_storage.isProtectedRoute(context.request.url)) {
                     return #upgrade; // Force verification in update call
@@ -71,14 +73,50 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                     {
                         if (Text.contains(url, #text path))
                         {
-                            if (not protected_routes_storage.verifyRouteAccess(path, url))
-                            {
-                                return
-                                {
-                                  statusCode = 403;
-                                  headers = [("Content-Type", "text/html")];
-                                  body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage(themeManager));
-                                  streamingStrategy = null;
+                            // Extract item ID from URL if this is an item route
+                            let itemIdOpt = NFCMeeting.extractItemIdFromUrl(url);
+
+                            switch (itemIdOpt) {
+                                case (?itemId) {
+                                    // This is an item route - use meeting-aware verification
+                                    let routeCmacs = protected_routes_storage.getRouteCmacs(path);
+                                    let scanCount = protection.scan_count_;
+
+                                    switch (NFCMeeting.createMeetingAwareResponse(url, itemId, collection, routeCmacs, scanCount)) {
+                                        case (?response) {
+                                            // Update scan count
+                                            ignore protected_routes_storage.verifyRouteAccess(path, url);
+
+                                            return {
+                                                statusCode = Nat16.toNat(response.statusCode);
+                                                headers = response.headers;
+                                                body = response.body;
+                                                streamingStrategy = null;
+                                            };
+                                        };
+                                        case null {
+                                            // Invalid scan
+                                            return {
+                                                statusCode = 403;
+                                                headers = [("Content-Type", "text/html")];
+                                                body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage(themeManager));
+                                                streamingStrategy = null;
+                                            };
+                                        };
+                                    };
+                                };
+                                case null {
+                                    // Not an item route - use standard verification
+                                    if (not protected_routes_storage.verifyRouteAccess(path, url))
+                                    {
+                                        return
+                                        {
+                                            statusCode = 403;
+                                            headers = [("Content-Type", "text/html")];
+                                            body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage(themeManager));
+                                            streamingStrategy = null;
+                                        };
+                                    };
                                 };
                             };
                         };
@@ -227,6 +265,51 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
       public query func getCollectionDescription() : async Text {
           collection.getCollectionDescription()
+      };
+
+      // ============================================
+      // PROOF-OF-MEETING API FUNCTIONS
+      // ============================================
+
+      // Create a new meeting session (first scan)
+      public shared func createMeetingSession(itemId: Nat, nfcUid: Text, cmac: Text) : async Result.Result<{challenge: Text}, Text> {
+          collection.createMeetingSession(itemId, nfcUid, cmac)
+      };
+
+      // Join an existing meeting session (subsequent scans)
+      public shared func joinMeetingSession(challenge: Text, itemId: Nat, nfcUid: Text, cmac: Text) : async Result.Result<{items_in_session: [Nat]}, Text> {
+          collection.joinMeetingSession(challenge, itemId, nfcUid, cmac)
+      };
+
+      // Finalize a meeting and distribute tokens
+      public shared func finalizeMeeting(challenge: Text) : async Result.Result<{meeting_id: Text; items_rewarded: [Nat]}, Text> {
+          collection.finalizeMeeting(challenge)
+      };
+
+      // Query meeting session status
+      public query func getMeetingSessionStatus(challenge: Text) : async Result.Result<{items_scanned: [Nat]; expires_in: Int; ready_to_finalize: Bool}, Text> {
+          collection.getMeetingSessionStatus(challenge)
+      };
+
+      // Get item's token balance
+      public query func getItemBalance(itemId: Nat) : async Result.Result<Nat, Text> {
+          collection.getItemBalance(itemId)
+      };
+
+      // Get item's meeting history
+      public query func getItemMeetingHistory(itemId: Nat) : async Result.Result<[Collection.MeetingRecord], Text> {
+          collection.getItemMeetingHistory(itemId)
+      };
+
+      // Admin: List all active meetings (for debugging)
+      public query func listActiveMeetings() : async [(Text, {
+          challenge: Text;
+          created_at: Int;
+          expires_at: Int;
+          scanned_items: [Nat];
+          status: Text;
+      })] {
+          collection.listActiveMeetings()
       };
 
     assetStore.set_streaming_callback(http_request_streaming_callback);

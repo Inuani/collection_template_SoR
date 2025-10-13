@@ -36,7 +36,7 @@ Isync:
 	icx-asset --replica https://ic0.app --pem ~/.config/dfx/identity/raygen/identity.pem sync $(CANISTER_ID) ./public
 
 protect:
-	python3 scripts/setup_route.py $(CANISTER_ID) files/certificat_0
+	python3 scripts/setup_route.py $(CANISTER_ID) item/2
 
 protect_ic:
 	python3 scripts/setup_route.py $(CANISTER_ID) files/certificat_1 --ic --random-key
