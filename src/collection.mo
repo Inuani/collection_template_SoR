@@ -454,7 +454,7 @@ module {
             let allItems = getAllItems();
 
             if (allItems.size() == 0) {
-                return "<div class=\"empty-collection\"><h2>Aucun article dans la collection.</h2></div>";
+                return "<div class=\"empty-collection\"><h2>Aucun article dans la collection</h2></div>";
             };
 
             var html = "";
