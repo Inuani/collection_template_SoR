@@ -79,7 +79,7 @@ module Routes {
 
         // NEW: Meeting waiting page (first scan - waiting for more items)
         Router.getQuery("/meeting/waiting", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
-            let itemIdTextOpt = ctx.getQueryParam("item");
+            let _itemIdTextOpt = ctx.getQueryParam("item");
 
             // Get items from session (unwrap optional)
             let itemsInSession = switch (ctx.httpContext.session) {
@@ -185,9 +185,10 @@ module Routes {
                 return ctx.buildResponse(#badRequest, #html(html));
             };
 
-            // TODO: Award tokens to all items
-            // Note: Use collection.finalizeMeeting() with a proper challenge system
-            // or implement a direct token award function in collection.mo
+            // Award tokens to all items
+            for (itemId in itemsInSession.vals()) {
+                ignore collection.addTokens(itemId, 10); // 10 tokens per meeting
+            };
 
             // Generate success message
             var itemsText = "";

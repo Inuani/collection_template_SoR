@@ -405,6 +405,31 @@ module {
             };
         };
 
+        // Add tokens to an item's balance
+        public func addTokens(itemId: Nat, amount: Nat) : Result.Result<(), Text> {
+            switch (Map.get(items, Nat.compare, itemId)) {
+                case null {
+                    #err("Item with ID " # Nat.toText(itemId) # " not found")
+                };
+                case (?item) {
+                    let updatedItem : Item = {
+                        id = item.id;
+                        name = item.name;
+                        thumbnailUrl = item.thumbnailUrl;
+                        imageUrl = item.imageUrl;
+                        description = item.description;
+                        rarity = item.rarity;
+                        attributes = item.attributes;
+                        token_balance = item.token_balance + amount;
+                        meeting_history = item.meeting_history;
+                    };
+                    Map.add(items, Nat.compare, itemId, updatedItem);
+                    updateState();
+                    #ok()
+                };
+            };
+        };
+
         // Finalize a meeting and distribute tokens
         public func finalizeMeeting(challenge: Text) : Result.Result<{meeting_id: Text; items_rewarded: [Nat]}, Text> {
             let currentTime = Time.now();

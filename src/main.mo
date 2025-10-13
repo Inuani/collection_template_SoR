@@ -18,7 +18,6 @@ import InvalidScan "invalid_scan";
 import Theme "theme";
 import Buttons "buttons";
 import NFCMeeting "nfc_meeting";
-import Nat16 "mo:core/Nat16";
 import Nat "mo:core/Nat";
 import Scan "scan";
 import Iter "mo:core/Iter";
@@ -84,7 +83,6 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                             switch (itemIdOpt) {
                                 case (?itemId) {
                                     // This is an item route - verify NFC first
-                                    let nfcParams = NFCMeeting.extractNFCParams(url);
                                     let routeCmacs = protected_routes_storage.getRouteCmacs(path);
                                     let scanCount = protection.scan_count_;
 
@@ -369,6 +367,11 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
       // Join an existing meeting session (subsequent scans)
       public shared func joinMeetingSession(challenge: Text, itemId: Nat, nfcUid: Text, cmac: Text) : async Result.Result<{items_in_session: [Nat]}, Text> {
           collection.joinMeetingSession(challenge, itemId, nfcUid, cmac)
+      };
+
+      // Add tokens to an item
+      public shared func addTokens(itemId: Nat, amount: Nat) : async Result.Result<(), Text> {
+          collection.addTokens(itemId, amount)
       };
 
       // Finalize a meeting and distribute tokens
