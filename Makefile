@@ -90,3 +90,9 @@ check_protect_routes:
 
 collection_name_update:
 	dfx canister call collection --ic setCollectionName '("Collection Ordre d'\''Évorev")'
+
+button_create:
+	dfx canister call $(CANISTER_NAME) addButton '("Instagram", "https://www.instagram.com/collections_evorev/")'
+
+buttons_see_all:
+	dfx canister call $(CANISTER_NAME) getAllButtons

@@ -2,15 +2,29 @@ import Liminal "mo:liminal";
 import RouteContext "mo:liminal/RouteContext";
 import Text "mo:core/Text";
 import Theme "theme";
+import Buttons "buttons";
 
-module Home {
+module {
     public func homePage(
         ctx: RouteContext.RouteContext,
         canisterId: Text,
         collectionName: Text,
-        themeManager: Theme.ThemeManager
+        themeManager: Theme.ThemeManager,
+        buttons: [Buttons.Button]
     ) : Liminal.HttpResponse {
         let primary = themeManager.getPrimary();
+
+        // Add collection button first
+        var buttonsHtml = "        <a href='http://" # canisterId # ".raw.icp0.io/collection' style='text-decoration: none; display: inline-block; margin: 10px;'>"
+                       # "            <button style='background-color: " # primary # "; color: white; padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;'>Voir la collection</button>"
+                       # "        </a>";
+
+        // Generate custom buttons HTML dynamically
+        for (btn in buttons.vals()) {
+            buttonsHtml #= "        <a href='" # btn.link # "' style='text-decoration: none; display: inline-block; margin: 10px;'>"
+                        # "            <button style='background-color: " # primary # "; color: white; padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;'>" # btn.text # "</button>"
+                        # "        </a>";
+        };
 
         let testHtml = "<!DOCTYPE html>"
               # "<html lang='fr'>"
@@ -33,15 +47,10 @@ module Home {
               # "        <h1>" # collectionName # "</h1>"
               # "    </div>"
               # "    <div style='margin-bottom: 20px;'>"
-              # "        <a href='https://discord.gg/' style='text-decoration: none; display: inline-block; margin: 10px;'>"
-              # "            <button style='background-color: " # primary # "; color: white; padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;'>Rejoins la communauté d'Évorev</button>"
-              # "        </a>"
-              # "        <a href='http://" # canisterId # ".raw.icp0.io/collection' style='text-decoration: none; display: inline-block; margin: 10px;'>"
-              # "            <button style='background-color: " # primary # "; color: white; padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;'>Voir la collection</button>"
-              # "        </a>"
+              # buttonsHtml
               # "    </div>"
               # "</body>"
               # "</html>";
         ctx.buildResponse(#ok, #html(testHtml))
-    }
+    };
 }

@@ -10,6 +10,7 @@ import Collection "collection";
 import Home "home";
 import Theme "theme";
 import Files "files";
+import Buttons "buttons";
 
 module Routes {
    public func routerConfig(
@@ -23,7 +24,8 @@ module Routes {
        },
        collection: Collection.Collection,
        themeManager: Theme.ThemeManager,
-       fileStorage: Files.FileStorage
+       fileStorage: Files.FileStorage,
+       buttonsManager: Buttons.ButtonsManager
    ) : Router.Config {
     {
       prefix              = null;
@@ -31,7 +33,7 @@ module Routes {
       routes = [
         Router.getQuery("/",
           func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
-            Home.homePage(ctx, canisterId, collection.getCollectionName(), themeManager)
+            Home.homePage(ctx, canisterId, collection.getCollectionName(), themeManager, buttonsManager.getAllButtons())
           }
         ),
         Router.getQuery("/item/{id}", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {

@@ -15,6 +15,7 @@ import App "mo:liminal/App";
 import HttpContext "mo:liminal/HttpContext";
 import InvalidScan "invalid_scan";
 import Theme "theme";
+import Buttons "buttons";
 
 shared ({ caller = initializer }) persistent actor class Actor() = self {
 
@@ -35,6 +36,9 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     let themeState = Theme.init();
     transient let themeManager = Theme.ThemeManager(themeState);
+
+    let buttonsState = Buttons.init();
+    transient let buttonsManager = Buttons.ButtonsManager(buttonsState);
 
 
     transient let setPermissions : HttpAssets.SetPermissions = {
@@ -95,7 +99,8 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                 file_storage.getFileChunk,
                 collection,
                 themeManager,
-                file_storage
+                file_storage,
+                buttonsManager
             )),
         ];
         errorSerializer = Liminal.defaultJsonErrorSerializer;
@@ -392,6 +397,42 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     public shared ({ caller }) func resetTheme() : async Theme.Theme {
         assert (caller == initializer);
         themeManager.resetTheme()
+    };
+
+    // ============================================
+    // BUTTONS MANAGEMENT FUNCTIONS (Admin Only)
+    // ============================================
+
+    public shared ({ caller }) func addButton(buttonText: Text, buttonLink: Text) : async Nat {
+        assert (caller == initializer);
+        buttonsManager.addButton(buttonText, buttonLink)
+    };
+
+    public shared ({ caller }) func updateButton(index: Nat, buttonText: Text, buttonLink: Text) : async Bool {
+        assert (caller == initializer);
+        buttonsManager.updateButton(index, buttonText, buttonLink)
+    };
+
+    public shared ({ caller }) func deleteButton(index: Nat) : async Bool {
+        assert (caller == initializer);
+        buttonsManager.deleteButton(index)
+    };
+
+    public query func getButton(index: Nat) : async ?Buttons.Button {
+        buttonsManager.getButton(index)
+    };
+
+    public query func getAllButtons() : async [Buttons.Button] {
+        buttonsManager.getAllButtons()
+    };
+
+    public query func getButtonCount() : async Nat {
+        buttonsManager.getButtonCount()
+    };
+
+    public shared ({ caller }) func clearAllButtons() : async () {
+        assert (caller == initializer);
+        buttonsManager.clearAllButtons()
     };
 
 };
