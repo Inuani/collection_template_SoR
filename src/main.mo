@@ -2,6 +2,7 @@ import Liminal "mo:liminal";
 import Principal "mo:core/Principal";
 import Error "mo:core/Error";
 import AssetsMiddleware "mo:liminal/Middleware/Assets";
+import SessionMiddleware "mo:liminal/Middleware/Session";
 import HttpAssets "mo:http-assets@0";
 import AssetCanister "mo:liminal/AssetCanister";
 import Text "mo:core/Text";
@@ -18,6 +19,10 @@ import Theme "theme";
 import Buttons "buttons";
 import NFCMeeting "nfc_meeting";
 import Nat16 "mo:core/Nat16";
+import Nat "mo:core/Nat";
+import Scan "scan";
+import Iter "mo:core/Iter";
+import Array "mo:core/Array";
 
 shared ({ caller = initializer }) persistent actor class Actor() = self {
 
@@ -57,7 +62,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     func createNFCProtectionMiddleware() : App.Middleware {
         {
-            name = "NFC Protection with Meeting System";
+            name = "NFC Protection with Session-Based Meetings";
             handleQuery = func(context : HttpContext.HttpContext, next : App.Next) : App.QueryResult {
                 if (protected_routes_storage.isProtectedRoute(context.request.url)) {
                     return #upgrade; // Force verification in update call
@@ -78,29 +83,97 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
                             switch (itemIdOpt) {
                                 case (?itemId) {
-                                    // This is an item route - use meeting-aware verification
+                                    // This is an item route - verify NFC first
+                                    let nfcParams = NFCMeeting.extractNFCParams(url);
                                     let routeCmacs = protected_routes_storage.getRouteCmacs(path);
                                     let scanCount = protection.scan_count_;
 
-                                    switch (NFCMeeting.createMeetingAwareResponse(url, itemId, collection, routeCmacs, scanCount)) {
-                                        case (?response) {
-                                            // Update scan count
-                                            ignore protected_routes_storage.verifyRouteAccess(path, url);
+                                    // Verify NFC signature
+                                    let counter = Scan.scan(routeCmacs, url, scanCount);
+                                    if (counter == 0) {
+                                        // Invalid NFC scan
+                                        return {
+                                            statusCode = 403;
+                                            headers = [("Content-Type", "text/html")];
+                                            body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage(themeManager));
+                                            streamingStrategy = null;
+                                        };
+                                    };
 
+                                    // Update scan count
+                                    ignore protected_routes_storage.verifyRouteAccess(path, url);
+
+                                    // Get session from context (unwrap optional)
+                                    switch (context.session) {
+                                        case null {
+                                            // No session available - shouldn't happen with session middleware
                                             return {
-                                                statusCode = Nat16.toNat(response.statusCode);
-                                                headers = response.headers;
-                                                body = response.body;
+                                                statusCode = 500;
+                                                headers = [("Content-Type", "text/html")];
+                                                body = ?Text.encodeUtf8("<html><body><h1>Session Error</h1><p>Session not available.</p></body></html>");
                                                 streamingStrategy = null;
                                             };
                                         };
-                                        case null {
-                                            // Invalid scan
-                                            return {
-                                                statusCode = 403;
-                                                headers = [("Content-Type", "text/html")];
-                                                body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage(themeManager));
-                                                streamingStrategy = null;
+                                        case (?session) {
+                                            // Check if session has active meeting
+                                            let itemsInSession = switch (session.get("meeting_items")) {
+                                                case null { [] }; // No meeting yet
+                                                case (?itemsText) {
+                                                    // Parse existing items
+                                                    let parts = Iter.toArray(Text.split(itemsText, #char ','));
+                                                    var items : [Nat] = [];
+                                                    for (part in parts.vals()) {
+                                                        switch (Nat.fromText(part)) {
+                                                            case (?n) { items := Array.concat(items, [n]); };
+                                                            case null {};
+                                                        };
+                                                    };
+                                                    items
+                                                };
+                                            };
+
+                                            // Check if item already in session
+                                            let alreadyScanned = Array.find<Nat>(itemsInSession, func(id) = id == itemId);
+
+                                            switch (alreadyScanned) {
+                                                case (?_) {
+                                                    // Already scanned - show error
+                                                    let html = "<html><body><h1>Already Scanned</h1><p>This item is already in the meeting.</p></body></html>";
+                                                    return {
+                                                        statusCode = 200;
+                                                        headers = [("Content-Type", "text/html")];
+                                                        body = ?Text.encodeUtf8(html);
+                                                        streamingStrategy = null;
+                                                    };
+                                                };
+                                                case null {
+                                                    // Add to session
+                                                    let updatedItems = Array.concat(itemsInSession, [itemId]);
+                                                    var itemsText = "";
+                                                    var first = true;
+                                                    for (id in updatedItems.vals()) {
+                                                        if (not first) { itemsText #= "," };
+                                                        itemsText #= Nat.toText(id);
+                                                        first := false;
+                                                    };
+                                                    session.set("meeting_items", itemsText);
+
+                                                    // Redirect to meeting page
+                                                    let redirectUrl = if (updatedItems.size() == 1) {
+                                                        "/meeting/waiting?item=" # Nat.toText(itemId)
+                                                    } else {
+                                                        "/meeting/active?items=" # itemsText
+                                                    };
+
+                                                    let html = "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0;url=" # redirectUrl # "'></head><body>✅ Scanned! Redirecting...</body></html>";
+
+                                                    return {
+                                                        statusCode = 200;
+                                                        headers = [("Content-Type", "text/html")];
+                                                        body = ?Text.encodeUtf8(html);
+                                                        streamingStrategy = null;
+                                                    };
+                                                };
                                             };
                                         };
                                     };
@@ -128,8 +201,25 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     };
 
 
+    // Configure session middleware for meeting system
+    transient let sessionStore = SessionMiddleware.buildInMemoryStore();
+    transient let sessionConfig : SessionMiddleware.Config = {
+        cookieName = "meeting_session";
+        idleTimeout = 2 * 60; // 2 minutes in seconds
+        cookieOptions = {
+            path = "/";
+            secure = false; // Set to true in production with HTTPS
+            httpOnly = true;
+            sameSite = ?#lax;
+            maxAge = ?(2 * 60); // 2 minutes
+        };
+        store = sessionStore;
+        idGenerator = SessionMiddleware.generateRandomId;
+    };
+
     transient let app = Liminal.App({
         middleware = [
+            SessionMiddleware.new(sessionConfig),
             createNFCProtectionMiddleware(),
             AssetsMiddleware.new(assetMiddlewareConfig),
             RouterMiddleware.new(Routes.routerConfig(

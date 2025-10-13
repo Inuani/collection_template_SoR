@@ -1,6 +1,8 @@
 
 import Router       "mo:liminal/Router";
 import RouteContext "mo:liminal/RouteContext";
+import HttpContext  "mo:liminal/HttpContext";
+import Session      "mo:liminal/Session";
 import Liminal      "mo:liminal";
 import Text "mo:core/Text";
 import Nat "mo:core/Nat";
@@ -75,7 +77,149 @@ module Routes {
                    ctx.buildResponse(#ok, #html(html))
                }),
 
-        // Meeting session route
+        // NEW: Meeting waiting page (first scan - waiting for more items)
+        Router.getQuery("/meeting/waiting", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
+            let itemIdTextOpt = ctx.getQueryParam("item");
+
+            // Get items from session (unwrap optional)
+            let itemsInSession = switch (ctx.httpContext.session) {
+                case null { [] };
+                case (?session) {
+                    switch (session.get("meeting_items")) {
+                        case null { [] };
+                        case (?itemsText) {
+                            let parts = Iter.toArray(Text.split(itemsText, #char ','));
+                            var items : [Nat] = [];
+                            for (part in parts.vals()) {
+                                switch (Nat.fromText(part)) {
+                                    case (?n) { items := Array.concat(items, [n]); };
+                                    case null {};
+                                };
+                            };
+                            items
+                        };
+                    };
+                };
+            };
+
+            if (itemsInSession.size() == 0) {
+                let html = "<html><body><h1>No Meeting Session</h1><p>Please scan an NFC tag to start a meeting.</p></body></html>";
+                return ctx.buildResponse(#ok, #html(html));
+            };
+
+            let firstItemId = itemsInSession[0];
+            switch (collection.getItem(firstItemId)) {
+                case null {
+                    let html = "<html><body><h1>Error</h1><p>Item not found.</p></body></html>";
+                    ctx.buildResponse(#notFound, #html(html))
+                };
+                case (?item) {
+                    let html = Meeting.generateWaitingPage(firstItemId, item, itemsInSession, themeManager);
+                    ctx.buildResponse(#ok, #html(html))
+                };
+            }
+        }),
+
+        // NEW: Meeting active page (multiple items scanned)
+        Router.getQuery("/meeting/active", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
+            // Get items from session (unwrap optional)
+            let itemsInSession = switch (ctx.httpContext.session) {
+                case null { [] };
+                case (?session) {
+                    switch (session.get("meeting_items")) {
+                        case null { [] };
+                        case (?itemsText) {
+                            let parts = Iter.toArray(Text.split(itemsText, #char ','));
+                            var items : [Nat] = [];
+                            for (part in parts.vals()) {
+                                switch (Nat.fromText(part)) {
+                                    case (?n) { items := Array.concat(items, [n]); };
+                                    case null {};
+                                };
+                            };
+                            items
+                        };
+                    };
+                };
+            };
+
+            if (itemsInSession.size() < 2) {
+                return {
+                    statusCode = 303;
+                    headers = [("Location", "/meeting/waiting?item=" # Nat.toText(itemsInSession[0]))];
+                    body = null;
+                    streamingStrategy = null;
+                };
+            };
+
+            let allItems = collection.getAllItems();
+            let html = Meeting.generateActiveSessionPage(itemsInSession, allItems, themeManager);
+            ctx.buildResponse(#ok, #html(html))
+        }),
+
+        // NEW: Meeting finalize (process the meeting from session)
+        Router.getAsyncUpdate("/meeting/finalize_session", func(ctx: RouteContext.RouteContext) : async* Liminal.HttpResponse {
+            // Get items from session (unwrap optional)
+            let itemsInSession = switch (ctx.httpContext.session) {
+                case null { [] };
+                case (?session) {
+                    switch (session.get("meeting_items")) {
+                        case null { [] };
+                        case (?itemsText) {
+                            let parts = Iter.toArray(Text.split(itemsText, #char ','));
+                            var items : [Nat] = [];
+                            for (part in parts.vals()) {
+                                switch (Nat.fromText(part)) {
+                                    case (?n) { items := Array.concat(items, [n]); };
+                                    case null {};
+                                };
+                            };
+                            items
+                        };
+                    };
+                };
+            };
+
+            if (itemsInSession.size() < 2) {
+                let html = "<html><body><h1>Error</h1><p>Need at least 2 items to finalize a meeting.</p></body></html>";
+                return ctx.buildResponse(#badRequest, #html(html));
+            };
+
+            // TODO: Award tokens to all items
+            // Note: Use collection.finalizeMeeting() with a proper challenge system
+            // or implement a direct token award function in collection.mo
+
+            // Generate success message
+            var itemsText = "";
+            var first = true;
+            for (id in itemsInSession.vals()) {
+                if (not first) { itemsText #= "," };
+                itemsText #= Nat.toText(id);
+                first := false;
+            };
+
+            // Clear session
+            switch (ctx.httpContext.session) {
+                case null {};
+                case (?session) {
+                    session.remove("meeting_items");
+                };
+            };
+
+            // Redirect to success page
+            let redirectUrl = "/meeting/success?items=" # itemsText;
+            return {
+                statusCode = 303;
+                headers = [
+                    ("Location", redirectUrl),
+                    ("Content-Type", "text/html")
+                ];
+                body = ?Text.encodeUtf8("<html><body>Meeting finalized! Redirecting...</body></html>");
+                streamingStrategy = null;
+            };
+        }),
+
+        // Meeting session route (LEGACY - keep for backwards compatibility)
         Router.getQuery("/meeting/session", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
             // Get challenge from query parameter
             let challengeOpt = ctx.getQueryParam("challenge");
@@ -184,15 +328,9 @@ module Routes {
             }
         }),
 
-        // Meeting success route
+        // Meeting success route (Updated to work with session-based system)
         Router.getQuery("/meeting/success", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
-            let meetingIdOpt = ctx.getQueryParam("id");
             let itemsTextOpt = ctx.getQueryParam("items");
-
-            let meetingId = switch (meetingIdOpt) {
-                case (?id) id;
-                case null "";
-            };
 
             let itemsText = switch (itemsTextOpt) {
                 case (?items) items;
@@ -213,7 +351,7 @@ module Routes {
             };
 
             let allItems = collection.getAllItems();
-            let html = Meeting.generateMeetingSuccessPage(meetingId, itemIds, allItems, themeManager);
+            let html = Meeting.generateSessionSuccessPage(itemIds, allItems, themeManager);
             ctx.buildResponse(#ok, #html(html))
         }),
 
