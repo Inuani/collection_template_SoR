@@ -359,30 +359,15 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
       // PROOF-OF-MEETING API FUNCTIONS
       // ============================================
 
-      // Create a new meeting session (first scan)
-      public shared func createMeetingSession(itemId: Nat, nfcUid: Text, cmac: Text) : async Result.Result<{challenge: Text}, Text> {
-          collection.createMeetingSession(itemId, nfcUid, cmac)
-      };
 
-      // Join an existing meeting session (subsequent scans)
-      public shared func joinMeetingSession(challenge: Text, itemId: Nat, nfcUid: Text, cmac: Text) : async Result.Result<{items_in_session: [Nat]}, Text> {
-          collection.joinMeetingSession(challenge, itemId, nfcUid, cmac)
-      };
+
 
       // Add tokens to an item
       public shared func addTokens(itemId: Nat, amount: Nat) : async Result.Result<(), Text> {
           collection.addTokens(itemId, amount)
       };
 
-      // Finalize a meeting and distribute tokens
-      public shared func finalizeMeeting(challenge: Text) : async Result.Result<{meeting_id: Text; items_rewarded: [Nat]}, Text> {
-          collection.finalizeMeeting(challenge)
-      };
 
-      // Query meeting session status
-      public query func getMeetingSessionStatus(challenge: Text) : async Result.Result<{items_scanned: [Nat]; expires_in: Int; ready_to_finalize: Bool}, Text> {
-          collection.getMeetingSessionStatus(challenge)
-      };
 
       // Get item's token balance
       public query func getItemBalance(itemId: Nat) : async Result.Result<Nat, Text> {
@@ -394,16 +379,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
           collection.getItemMeetingHistory(itemId)
       };
 
-      // Admin: List all active meetings (for debugging)
-      public query func listActiveMeetings() : async [(Text, {
-          challenge: Text;
-          created_at: Int;
-          expires_at: Int;
-          scanned_items: [Nat];
-          status: Text;
-      })] {
-          collection.listActiveMeetings()
-      };
+
 
     assetStore.set_streaming_callback(http_request_streaming_callback);
 

@@ -30,30 +30,12 @@ module {
         meeting_history: [MeetingRecord]; // array of past meetings
     };
 
-    // Pending Meeting Type
-    public type PendingMeeting = {
-        challenge: Text;
-        created_at: Int;
-        expires_at: Int;
-        scanned_items: [Nat]; // item IDs in this session
-        status: Text; // "pending" | "completed"
-    };
-
-    // Completed Meeting Type
-    public type CompletedMeeting = {
-        meeting_id: Text;
-        item_ids: [Nat];
-        completed_at: Int;
-    };
-
     // State for persistence across upgrades
     public type State = {
         var items : [(Nat, Item)];
         var nextId : Nat;
         var collectionName : Text;
         var collectionDescription : Text;
-        var pending_meetings : [(Text, PendingMeeting)];
-        var completed_meetings : [(Text, CompletedMeeting)];
     };
 
     // Initialize state
@@ -62,8 +44,6 @@ module {
         var nextId = 0;
         var collectionName = "Collection d'Évorev";
         var collectionDescription = "Une collection parmi d'autre ...";
-        var pending_meetings = [];
-        var completed_meetings = [];
     };
 
     public class Collection(state : State) {
@@ -75,89 +55,15 @@ module {
 
         private var nextId = state.nextId;
 
-        // Meeting session maps
-        private var pendingMeetings = Map.fromIter<Text, PendingMeeting>(
-            state.pending_meetings.values(),
-            Text.compare,
-        );
-
-        private var completedMeetings = Map.fromIter<Text, CompletedMeeting>(
-            state.completed_meetings.values(),
-            Text.compare,
-        );
-
         // Update state for persistence
         private func updateState() {
             state.items := Iter.toArray(Map.entries(items));
             state.nextId := nextId;
-            state.pending_meetings := Iter.toArray(Map.entries(pendingMeetings));
-            state.completed_meetings := Iter.toArray(Map.entries(completedMeetings));
         };
 
         // ============================================
         // UTILITY FUNCTIONS
         // ============================================
-
-        // Generate a random UUID-like challenge
-        private func generateChallenge(timestamp: Int, itemId: Nat) : Text {
-            let hash1 = Int.toText(timestamp);
-            let hash2 = Nat.toText(itemId);
-            let combined = hash1 # "-" # hash2 # "-" # Int.toText(timestamp % 1000000);
-            combined
-        };
-
-        // Check if a session is expired
-        private func isExpired(expiresAt: Int, currentTime: Int) : Bool {
-            currentTime > expiresAt
-        };
-
-        // Check cooldown period - same items cannot meet within 24 hours
-        private func checkCooldown(itemIds: [Nat], currentTime: Int) : Bool {
-            let sortedIds = Array.sort(itemIds, Nat.compare);
-
-            // Check all completed meetings
-            for ((_, meeting) in Map.entries(completedMeetings)) {
-                let sortedMeetingIds = Array.sort(meeting.item_ids, Nat.compare);
-
-                // Check if same set of items
-                if (arraysEqual(sortedIds, sortedMeetingIds)) {
-                    let timeDiff = currentTime - meeting.completed_at;
-                    let oneDayInNanos = 86_400_000_000_000; // 24 hours in nanoseconds
-
-                    if (timeDiff < oneDayInNanos) {
-                        return false; // Still in cooldown
-                    };
-                };
-            };
-            true // No cooldown
-        };
-
-        // Helper to compare arrays
-        private func arraysEqual(a: [Nat], b: [Nat]) : Bool {
-            if (a.size() != b.size()) {
-                return false;
-            };
-
-            var i = 0;
-            while (i < a.size()) {
-                if (a[i] != b[i]) {
-                    return false;
-                };
-                i += 1;
-            };
-            true
-        };
-
-        // Clean up expired sessions
-        private func cleanupExpiredSessions(currentTime: Int) {
-            let entries = Iter.toArray(Map.entries(pendingMeetings));
-            for ((challenge, meeting) in entries.vals()) {
-                if (isExpired(meeting.expires_at, currentTime) and meeting.status == "pending") {
-                    ignore Map.delete(pendingMeetings, Text.compare, challenge);
-                };
-            };
-            updateState();
-        };
 
         // ============================================
         // ADMIN FUNCTIONS (Add/Update/Delete)
@@ -263,147 +169,9 @@ module {
         };
 
         // ============================================
-        // PROOF-OF-MEETING FUNCTIONS
+        // TOKEN MANAGEMENT
         // ============================================
 
-        // Find any active meeting that doesn't include this item
-        private func findActiveMeeting(itemId: Nat, currentTime: Int) : ?Text {
-            for ((challenge, meeting) in Map.entries(pendingMeetings)) {
-                if (meeting.status == "pending" and not isExpired(meeting.expires_at, currentTime)) {
-                    // Check if item is not already in this meeting
-                    var alreadyInMeeting = false;
-                    for (existingId in meeting.scanned_items.vals()) {
-                        if (existingId == itemId) {
-                            alreadyInMeeting := true;
-                        };
-                    };
-
-                    if (not alreadyInMeeting) {
-                        return ?challenge;
-                    };
-                };
-            };
-            null
-        };
-
-        // Create a new meeting session OR join existing one
-        public func createMeetingSession(itemId: Nat, _nfcUid: Text, _cmac: Text) : Result.Result<{challenge: Text}, Text> {
-            // Verify item exists
-            switch (Map.get(items, Nat.compare, itemId)) {
-                case null {
-                    return #err("Item with ID " # Nat.toText(itemId) # " not found");
-                };
-                case (?_item) {
-                    let currentTime = Time.now();
-
-                    // Clean up expired sessions first
-                    cleanupExpiredSessions(currentTime);
-
-                    // Check if there's an active meeting this item can join
-                    switch (findActiveMeeting(itemId, currentTime)) {
-                        case (?existingChallenge) {
-                            // Join the existing meeting instead of creating new one
-                            switch (Map.get(pendingMeetings, Text.compare, existingChallenge)) {
-                                case (?meeting) {
-                                    let updatedItems = Array.concat(meeting.scanned_items, [itemId]);
-                                    let updatedMeeting : PendingMeeting = {
-                                        challenge = meeting.challenge;
-                                        created_at = meeting.created_at;
-                                        expires_at = meeting.expires_at;
-                                        scanned_items = updatedItems;
-                                        status = meeting.status;
-                                    };
-
-                                    Map.add(pendingMeetings, Text.compare, existingChallenge, updatedMeeting);
-                                    updateState();
-
-                                    return #ok({challenge = existingChallenge});
-                                };
-                                case null {
-                                    // Shouldn't happen, but fall through to create new meeting
-                                };
-                            };
-                        };
-                        case null {
-                            // No active meeting found, create a new one
-                        };
-                    };
-
-                    // Generate challenge for new meeting
-                    let challenge = generateChallenge(currentTime, itemId);
-
-                    // Create pending meeting (expires in 2 minutes)
-                    let twoMinutesInNanos = 120_000_000_000; // 2 minutes in nanoseconds
-                    let expiresAt = currentTime + twoMinutesInNanos;
-
-                    let pendingMeeting : PendingMeeting = {
-                        challenge = challenge;
-                        created_at = currentTime;
-                        expires_at = expiresAt;
-                        scanned_items = [itemId];
-                        status = "pending";
-                    };
-
-                    Map.add(pendingMeetings, Text.compare, challenge, pendingMeeting);
-                    updateState();
-
-                    #ok({challenge = challenge})
-                };
-            };
-        };
-
-        // Join an existing meeting session
-        public func joinMeetingSession(challenge: Text, itemId: Nat, _nfcUid: Text, _cmac: Text) : Result.Result<{items_in_session: [Nat]}, Text> {
-            // Verify item exists
-            switch (Map.get(items, Nat.compare, itemId)) {
-                case null {
-                    return #err("Item with ID " # Nat.toText(itemId) # " not found");
-                };
-                case (?_item) {
-                    let currentTime = Time.now();
-
-                    // Get pending meeting
-                    switch (Map.get(pendingMeetings, Text.compare, challenge)) {
-                        case null {
-                            return #err("Meeting session not found or expired");
-                        };
-                        case (?meeting) {
-                            // Check if expired
-                            if (isExpired(meeting.expires_at, currentTime)) {
-                                return #err("Meeting session has expired");
-                            };
-
-                            // Check if already completed
-                            if (meeting.status != "pending") {
-                                return #err("Meeting session already completed");
-                            };
-
-                            // Check if item already in session
-                            for (existingId in meeting.scanned_items.vals()) {
-                                if (existingId == itemId) {
-                                    return #err("Item already scanned in this session");
-                                };
-                            };
-
-                            // Add item to session
-                            let updatedItems = Array.concat(meeting.scanned_items, [itemId]);
-                            let updatedMeeting : PendingMeeting = {
-                                challenge = meeting.challenge;
-                                created_at = meeting.created_at;
-                                expires_at = meeting.expires_at;
-                                scanned_items = updatedItems;
-                                status = meeting.status;
-                            };
-
-                            Map.add(pendingMeetings, Text.compare, challenge, updatedMeeting);
-                            updateState();
-
-                            #ok({items_in_session = updatedItems})
-                        };
-                    };
-                };
-            };
-        };
 
         // Add tokens to an item's balance
         public func addTokens(itemId: Nat, amount: Nat) : Result.Result<(), Text> {
@@ -430,121 +198,7 @@ module {
             };
         };
 
-        // Finalize a meeting and distribute tokens
-        public func finalizeMeeting(challenge: Text) : Result.Result<{meeting_id: Text; items_rewarded: [Nat]}, Text> {
-            let currentTime = Time.now();
 
-            // Get pending meeting
-            switch (Map.get(pendingMeetings, Text.compare, challenge)) {
-                case null {
-                    return #err("Meeting session not found");
-                };
-                case (?meeting) {
-                    // Check if expired
-                    if (isExpired(meeting.expires_at, currentTime)) {
-                        return #err("Meeting session has expired");
-                    };
-
-                    // Check if already completed
-                    if (meeting.status != "pending") {
-                        return #err("Meeting already finalized");
-                    };
-
-                    // Must have at least 2 items
-                    if (meeting.scanned_items.size() < 2) {
-                        return #err("Need at least 2 items to finalize meeting");
-                    };
-
-                    // Check cooldown period
-                    if (not checkCooldown(meeting.scanned_items, currentTime)) {
-                        return #err("These items have met too recently. Please wait 24 hours.");
-                    };
-
-                    // Generate unique meeting ID
-                    let meetingId = "meeting-" # Int.toText(currentTime) # "-" # Nat.toText(meeting.scanned_items.size());
-
-                    // Reward each item
-                    let tokensPerMeeting = 10;
-
-                    for (itemId in meeting.scanned_items.vals()) {
-                        switch (Map.get(items, Nat.compare, itemId)) {
-                            case null { /* Skip if item not found */ };
-                            case (?item) {
-                                // Get partner items (all items except this one)
-                                let partnerItems = Array.filter<Nat>(meeting.scanned_items, func(id) { id != itemId });
-
-                                // Create meeting record
-                                let meetingRecord : MeetingRecord = {
-                                    meeting_id = meetingId;
-                                    date = currentTime;
-                                    partner_item_ids = partnerItems;
-                                    tokens_earned = tokensPerMeeting;
-                                };
-
-                                // Update item with new balance and history
-                                let updatedItem : Item = {
-                                    id = item.id;
-                                    name = item.name;
-                                    thumbnailUrl = item.thumbnailUrl;
-                                    imageUrl = item.imageUrl;
-                                    description = item.description;
-                                    rarity = item.rarity;
-                                    attributes = item.attributes;
-                                    token_balance = item.token_balance + tokensPerMeeting;
-                                    meeting_history = Array.concat(item.meeting_history, [meetingRecord]);
-                                };
-
-                                Map.add(items, Nat.compare, itemId, updatedItem);
-                            };
-                        };
-                    };
-
-                    // Mark meeting as completed
-                    let completedMeeting : CompletedMeeting = {
-                        meeting_id = meetingId;
-                        item_ids = meeting.scanned_items;
-                        completed_at = currentTime;
-                    };
-
-                    Map.add(completedMeetings, Text.compare, meetingId, completedMeeting);
-
-                    // Update pending meeting status
-                    let finalizedMeeting : PendingMeeting = {
-                        challenge = meeting.challenge;
-                        created_at = meeting.created_at;
-                        expires_at = meeting.expires_at;
-                        scanned_items = meeting.scanned_items;
-                        status = "completed";
-                    };
-
-                    Map.add(pendingMeetings, Text.compare, challenge, finalizedMeeting);
-                    updateState();
-
-                    #ok({meeting_id = meetingId; items_rewarded = meeting.scanned_items})
-                };
-            };
-        };
-
-        // Get meeting session status
-        public func getMeetingSessionStatus(challenge: Text) : Result.Result<{items_scanned: [Nat]; expires_in: Int; ready_to_finalize: Bool}, Text> {
-            let currentTime = Time.now();
-
-            switch (Map.get(pendingMeetings, Text.compare, challenge)) {
-                case null {
-                    return #err("Meeting session not found");
-                };
-                case (?meeting) {
-                    let expiresIn = meeting.expires_at - currentTime;
-                    let readyToFinalize = meeting.scanned_items.size() >= 2 and not isExpired(meeting.expires_at, currentTime);
-
-                    #ok({
-                        items_scanned = meeting.scanned_items;
-                        expires_in = expiresIn;
-                        ready_to_finalize = readyToFinalize;
-                    })
-                };
-            };
-        };
 
         // Get item's token balance
         public func getItemBalance(itemId: Nat) : Result.Result<Nat, Text> {
@@ -571,24 +225,7 @@ module {
         };
 
         // Admin function: List all active meetings (for debugging)
-        public func listActiveMeetings() : [(Text, {
-            challenge: Text;
-            created_at: Int;
-            expires_at: Int;
-            scanned_items: [Nat];
-            status: Text;
-        })] {
-            let currentTime = Time.now();
-            var activeMeetings : [(Text, PendingMeeting)] = [];
 
-            for ((challenge, meeting) in Map.entries(pendingMeetings)) {
-                if (meeting.status == "pending" and not isExpired(meeting.expires_at, currentTime)) {
-                    activeMeetings := Array.concat(activeMeetings, [(challenge, meeting)]);
-                };
-            };
-
-            activeMeetings
-        };
 
         // ============================================
         // COLLECTION SETTINGS
