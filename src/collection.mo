@@ -198,7 +198,52 @@ module {
             };
         };
 
+        // Record a meeting for multiple items
+        public func recordMeeting(itemIds: [Nat], meetingId: Text, tokensEarned: Nat) : Result.Result<(), Text> {
+            let timestamp = Time.now();
 
+            // Update each item with the meeting record
+            for (itemId in itemIds.vals()) {
+                switch (Map.get(items, Nat.compare, itemId)) {
+                    case null {
+                        // Skip items that don't exist
+                    };
+                    case (?item) {
+                        // Get other participants (exclude current item)
+                        let partnerIds = Array.filter<Nat>(itemIds, func(id) = id != itemId);
+
+                        // Create meeting record
+                        let meetingRecord : MeetingRecord = {
+                            meeting_id = meetingId;
+                            date = timestamp;
+                            partner_item_ids = partnerIds;
+                            tokens_earned = tokensEarned;
+                        };
+
+                        // Add to history
+                        let updatedHistory = Array.concat(item.meeting_history, [meetingRecord]);
+
+                        // Update item with new history and tokens
+                        let updatedItem : Item = {
+                            id = item.id;
+                            name = item.name;
+                            thumbnailUrl = item.thumbnailUrl;
+                            imageUrl = item.imageUrl;
+                            description = item.description;
+                            rarity = item.rarity;
+                            attributes = item.attributes;
+                            token_balance = item.token_balance + tokensEarned;
+                            meeting_history = updatedHistory;
+                        };
+
+                        Map.add(items, Nat.compare, itemId, updatedItem);
+                    };
+                };
+            };
+
+            updateState();
+            #ok()
+        };
 
         // Get item's token balance
         public func getItemBalance(itemId: Nat) : Result.Result<Nat, Text> {

@@ -11,6 +11,7 @@ import Time "mo:core/Time";
 import Blob "mo:core/Blob";
 import Iter "mo:core/Iter";
 import Array "mo:core/Array";
+import Debug "mo:core/Debug";
 // import Route "mo:liminal/Route";
 import Collection "collection";
 import Home "home";
@@ -81,6 +82,7 @@ module Routes {
 
         // NEW: Meeting waiting page (first scan - waiting for more items)
         Router.getQuery("/meeting/waiting", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
+            Debug.print("[ROUTE] /meeting/waiting accessed");
             let _itemIdTextOpt = ctx.getQueryParam("item");
 
             // Get items from session (unwrap optional)
@@ -105,23 +107,37 @@ module Routes {
             };
 
             if (itemsInSession.size() == 0) {
+                Debug.print("[Waiting Page] No items in session - showing error");
                 let html = "<html><body><h1>No Meeting Session</h1><p>Please scan an NFC tag to start a meeting.</p></body></html>";
                 return ctx.buildResponse(#ok, #html(html));
             };
 
-            // Check if meeting has expired (2 minutes = 120 seconds = 120_000_000_000 nanoseconds)
+            Debug.print("[Waiting Page] Items in session: " # Nat.toText(itemsInSession.size()));
+
+            // Check if meeting has expired (1 minute = 60 seconds = 60_000_000_000 nanoseconds)
             let meetingExpired = switch (ctx.httpContext.session) {
-                case null { false };
+                case null {
+                    Debug.print("[Waiting Page] No session found");
+                    false
+                };
                 case (?session) {
                     switch (session.get("meeting_start_time")) {
-                        case null { false };
+                        case null {
+                            Debug.print("[Waiting Page] No meeting_start_time in session");
+                            false
+                        };
                         case (?startTimeText) {
                             switch (Int.fromText(startTimeText)) {
-                                case null { false };
+                                case null {
+                                    Debug.print("[Waiting Page] Invalid timestamp format: " # startTimeText);
+                                    false
+                                };
                                 case (?startTime) {
                                     let elapsed = Time.now() - startTime;
-                                    let twoMinutesInNanos : Int = 120_000_000_000;
-                                    elapsed > twoMinutesInNanos
+                                    let oneMinuteInNanos : Int = 60_000_000_000;
+                                    let elapsedSeconds = elapsed / 1_000_000_000;
+                                    Debug.print("[Waiting Page] Timer check - Elapsed: " # Int.toText(elapsedSeconds) # "s, Expired: " # (if (elapsed > oneMinuteInNanos) { "YES" } else { "NO" }));
+                                    elapsed > oneMinuteInNanos
                                 };
                             };
                         };
@@ -131,10 +147,13 @@ module Routes {
 
             // If meeting expired and we have 2+ items, auto-finalize
             if (meetingExpired and itemsInSession.size() >= 2) {
-                // Award tokens to all items
-                for (itemId in itemsInSession.vals()) {
-                    ignore collection.addTokens(itemId, 10);
-                };
+                Debug.print("[Waiting Page] AUTO-FINALIZING MEETING - Items: " # Nat.toText(itemsInSession.size()));
+
+                // Generate unique meeting ID using timestamp
+                let meetingId = "meeting_" # Int.toText(Time.now());
+
+                // Record the meeting (awards tokens AND updates history)
+                ignore collection.recordMeeting(itemsInSession, meetingId, 10);
 
                 // Build items text for redirect
                 var itemsText = "";
@@ -188,6 +207,7 @@ module Routes {
 
         // NEW: Meeting active page (multiple items scanned)
         Router.getQuery("/meeting/active", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
+            Debug.print("[ROUTE] /meeting/active accessed");
             // Get items from session (unwrap optional)
             let itemsInSession = switch (ctx.httpContext.session) {
                 case null { [] };
@@ -218,19 +238,30 @@ module Routes {
                 };
             };
 
-            // Check if meeting has expired (2 minutes = 120 seconds = 120_000_000_000 nanoseconds)
+            // Check if meeting has expired (1 minute = 60 seconds = 60_000_000_000 nanoseconds)
             let meetingExpired = switch (ctx.httpContext.session) {
-                case null { false };
+                case null {
+                    Debug.print("[Active Page] No session found");
+                    false
+                };
                 case (?session) {
                     switch (session.get("meeting_start_time")) {
-                        case null { false };
+                        case null {
+                            Debug.print("[Active Page] No meeting_start_time in session");
+                            false
+                        };
                         case (?startTimeText) {
                             switch (Int.fromText(startTimeText)) {
-                                case null { false };
+                                case null {
+                                    Debug.print("[Active Page] Invalid timestamp format: " # startTimeText);
+                                    false
+                                };
                                 case (?startTime) {
                                     let elapsed = Time.now() - startTime;
-                                    let twoMinutesInNanos : Int = 120_000_000_000;
-                                    elapsed > twoMinutesInNanos
+                                    let oneMinuteInNanos : Int = 60_000_000_000;
+                                    let elapsedSeconds = elapsed / 1_000_000_000;
+                                    Debug.print("[Active Page] Timer check - Elapsed: " # Int.toText(elapsedSeconds) # "s, Expired: " # (if (elapsed > oneMinuteInNanos) { "YES" } else { "NO" }));
+                                    elapsed > oneMinuteInNanos
                                 };
                             };
                         };
@@ -240,10 +271,13 @@ module Routes {
 
             // If meeting expired, auto-finalize
             if (meetingExpired) {
-                // Award tokens to all items
-                for (itemId in itemsInSession.vals()) {
-                    ignore collection.addTokens(itemId, 10);
-                };
+                Debug.print("[Active Page] AUTO-FINALIZING MEETING - Items: " # Nat.toText(itemsInSession.size()));
+
+                // Generate unique meeting ID using timestamp
+                let meetingId = "meeting_" # Int.toText(Time.now());
+
+                // Record the meeting (awards tokens AND updates history)
+                ignore collection.recordMeeting(itemsInSession, meetingId, 10);
 
                 // Build items text for redirect
                 var itemsText = "";
@@ -315,10 +349,11 @@ module Routes {
                 return ctx.buildResponse(#badRequest, #html(html));
             };
 
-            // Award tokens to all items
-            for (itemId in itemsInSession.vals()) {
-                ignore collection.addTokens(itemId, 10); // 10 tokens per meeting
-            };
+            // Generate unique meeting ID using timestamp
+            let meetingId = "meeting_" # Int.toText(Time.now());
+
+            // Record the meeting (awards tokens AND updates history)
+            ignore collection.recordMeeting(itemsInSession, meetingId, 10);
 
             // Generate success message
             var itemsText = "";

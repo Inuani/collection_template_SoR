@@ -208,13 +208,13 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     transient let sessionStore = SessionMiddleware.buildInMemoryStore();
     transient let sessionConfig : SessionMiddleware.Config = {
         cookieName = "meeting_session";
-        idleTimeout = 2 * 60; // 2 minutes in seconds
+        idleTimeout = 3 * 60; // 3 minutes in seconds (longer than meeting duration)
         cookieOptions = {
             path = "/";
             secure = false; // Set to true in production with HTTPS
             httpOnly = true;
             sameSite = ?#lax;
-            maxAge = ?(2 * 60); // 2 minutes
+            maxAge = ?(3 * 60); // 3 minutes
         };
         store = sessionStore;
         idGenerator = SessionMiddleware.generateRandomId;
@@ -370,6 +370,11 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
       // Add tokens to an item
       public shared func addTokens(itemId: Nat, amount: Nat) : async Result.Result<(), Text> {
           collection.addTokens(itemId, amount)
+      };
+
+      // Record a meeting for multiple items
+      public shared func recordMeeting(itemIds: [Nat], meetingId: Text, tokensEarned: Nat) : async Result.Result<(), Text> {
+          collection.recordMeeting(itemIds, meetingId, tokensEarned)
       };
 
 

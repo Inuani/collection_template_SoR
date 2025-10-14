@@ -271,7 +271,7 @@ module {
         .btn:hover { background: #e5e7eb; }
     </style>
     <script>
-        const MEETING_DURATION = 120; // 2 minutes in seconds
+        const MEETING_DURATION = 60; // 1 minute in seconds
         const storageKey = 'meeting_session_active';
 
         // Get server timestamp (in nanoseconds) and convert to milliseconds
@@ -301,9 +301,12 @@ module {
 
             if (remainingSeconds === 0) {
                 console.log('[Waiting Page] Timer expired - auto-finalizing meeting');
+                countdownEl.textContent = 'Finalizing...';
                 localStorage.removeItem(storageKey);
-                // Reload page - backend will detect expiration and auto-finalize
-                window.location.reload();
+                // Wait 500ms to ensure backend timestamp has passed the threshold
+                setTimeout(() => {
+                    window.location.reload();
+                }, 500);
             }
         }
 
@@ -322,7 +325,7 @@ module {
 
             <div class=\"spinner\"></div>
 
-            <div class=\"countdown\" id=\"countdown\">2:00</div>
+            <div class=\"countdown\" id=\"countdown\">1:00</div>
             <div class=\"countdown-label\">Temps restant pour rejoindre</div>
 
             <div class=\"instructions\">
@@ -482,7 +485,7 @@ module {
         .btn-secondary:hover { background: #e5e7eb; }
     </style>
     <script>
-        const MEETING_DURATION = 120;
+        const MEETING_DURATION = 60;
         const storageKey = 'meeting_session_active';
 
         // Get server timestamp (in nanoseconds) and convert to milliseconds
@@ -512,9 +515,12 @@ module {
 
             if (remainingSeconds === 0) {
                 console.log('[Active Page] Timer expired - auto-finalizing meeting');
+                countdownEl.textContent = 'Finalizing...';
                 localStorage.removeItem(storageKey);
-                // Reload page - backend will detect expiration and auto-finalize
-                window.location.reload();
+                // Wait 500ms to ensure backend timestamp has passed the threshold
+                setTimeout(() => {
+                    window.location.reload();
+                }, 500);
             }
         }
 
@@ -528,7 +534,7 @@ module {
             <div class=\"icon\">🎉</div>
             <h1>Réunion Active</h1>
 
-            <div class=\"countdown\" id=\"countdown\">2:00</div>
+            <div class=\"countdown\" id=\"countdown\">1:00</div>
             <div class=\"countdown-label\">Temps restant pour rejoindre</div>
 
             <div class=\"items-section\">
