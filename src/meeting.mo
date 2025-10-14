@@ -15,11 +15,11 @@ module {
         let primary = themeManager.getPrimary();
 
         "<!DOCTYPE html>
-<html lang=\"en\">
+<html lang=\"fr\">
 <head>
     <meta charset=\"UTF-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-    <title>Meeting Error</title>
+    <title>Erreur de Réunion</title>
     <style>
         * {
             margin: 0;
@@ -28,9 +28,9 @@ module {
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            background: #ffffff;
             min-height: 100vh;
-            color: white;
+            color: #333;
             padding: 2rem;
             display: flex;
             align-items: center;
@@ -44,7 +44,8 @@ module {
             background: white;
             border-radius: 20px;
             padding: 3rem 2rem;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 2px solid #fee2e2;
             color: #333;
             text-align: center;
         }
@@ -78,9 +79,10 @@ module {
             text-decoration: none;
             display: inline-block;
             margin-top: 1rem;
+            transition: opacity 0.2s;
         }
         .btn:hover {
-            opacity: 0.9;
+            opacity: 0.8;
         }
     </style>
 </head>
@@ -88,13 +90,13 @@ module {
     <div class=\"container\">
         <div class=\"error-card\">
             <div class=\"icon\">⚠️</div>
-            <h1>Meeting Error</h1>
+            <h1>Erreur de Réunion</h1>
 
             <div class=\"error-message\">
                 " # errorMessage # "
             </div>
 
-            <a href=\"/collection\" class=\"btn\">Back to Collection</a>
+            <a href=\"/collection\" class=\"btn\">Retour à la Collection</a>
         </div>
     </div>
 </body>
@@ -115,16 +117,16 @@ module {
                     html #= "<li class=\"item-entry" # (if (isCurrent) { " current" } else { "" }) # "\">
                         <img src=\"" # item.thumbnailUrl # "\" alt=\"" # item.name # "\" class=\"item-icon\">
                         <div class=\"item-info\">
-                            <div class=\"item-name\">" # item.name # (if (isCurrent) { " (You)" } else { "" }) # "</div>
-                            <div class=\"item-id\">Item #" # Nat.toText(item.id) # "</div>
+                            <div class=\"item-name\">" # item.name # (if (isCurrent) { " (Vous)" } else { "" }) # "</div>
+                            <div class=\"item-id\">Objet #" # Nat.toText(item.id) # "</div>
                         </div>
                     </li>";
                 };
                 case null {
                     html #= "<li class=\"item-entry\">
                         <div class=\"item-info\">
-                            <div class=\"item-name\">Item #" # Nat.toText(itemId) # "</div>
-                            <div class=\"item-id\">Details unavailable</div>
+                            <div class=\"item-name\">Objet #" # Nat.toText(itemId) # "</div>
+                            <div class=\"item-id\">Détails non disponibles</div>
                         </div>
                     </li>";
                 };
@@ -147,15 +149,15 @@ module {
                         <img src=\"" # item.thumbnailUrl # "\" alt=\"" # item.name # "\" class=\"item-icon\">
                         <div class=\"item-info\">
                             <div class=\"item-name\">" # item.name # "</div>
-                            <div class=\"item-tokens\">+10 tokens</div>
+                            <div class=\"item-tokens\">+10 jetons</div>
                         </div>
                     </div>";
                 };
                 case null {
                     html #= "<div class=\"item-entry\">
                         <div class=\"item-info\">
-                            <div class=\"item-name\">Item #" # Nat.toText(itemId) # "</div>
-                            <div class=\"item-tokens\">+10 tokens</div>
+                            <div class=\"item-name\">Objet #" # Nat.toText(itemId) # "</div>
+                            <div class=\"item-tokens\">+10 jetons</div>
                         </div>
                     </div>";
                 };
@@ -173,20 +175,21 @@ module {
         themeManager: Theme.ThemeManager
     ) : Text {
         let primary = themeManager.getPrimary();
+        let secondary = themeManager.getSecondary();
 
         "<!DOCTYPE html>
-<html lang=\"en\">
+<html lang=\"fr\">
 <head>
     <meta charset=\"UTF-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-    <title>Meeting Started - Waiting</title>
+    <title>Réunion Démarrée - En Attente</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #ffffff;
             min-height: 100vh;
-            color: white;
+            color: #333;
             padding: 2rem;
             display: flex;
             align-items: center;
@@ -197,76 +200,140 @@ module {
             background: white;
             border-radius: 20px;
             padding: 2rem;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 2px solid #f3f4f6;
             color: #333;
             text-align: center;
         }
         .icon { font-size: 4rem; margin-bottom: 1rem; }
-        h1 { font-size: 2rem; color: " # primary # "; margin-bottom: 1rem; }
-        .item-name { font-size: 1.3rem; color: #718096; margin-bottom: 2rem; }
-        .pulse {
-            width: 100px;
-            height: 100px;
+        h1 { font-size: 2rem; color: #1f2937; margin-bottom: 1rem; }
+        .item-name { font-size: 1.3rem; color: #6b7280; margin-bottom: 2rem; }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
             margin: 2rem auto;
-            background: " # primary # ";
+            border: 4px solid #e5e7eb;
+            border-top-color: " # primary # ";
             border-radius: 50%;
-            animation: pulse 2s ease-in-out infinite;
+            animation: spin 1s linear infinite;
         }
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); opacity: 0.7; }
-            50% { transform: scale(1.2); opacity: 1; }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
+
+        .countdown {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: " # primary # ";
+            margin: 1rem 0;
+        }
+        .countdown-label {
+            font-size: 1rem;
+            color: #6b7280;
+            margin-bottom: 2rem;
+        }
+        .countdown-small {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: " # primary # ";
+            margin: 1rem 0 0.5rem 0;
+        }
+        .countdown-label-small {
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin-bottom: 1rem;
+        }
+
         .instructions {
-            background: #f7fafc;
+            background: #f9fafb;
             padding: 1.5rem;
             border-radius: 10px;
             margin: 2rem 0;
             text-align: left;
+            border: 1px solid #e5e7eb;
         }
-        .instructions h3 { color: #2d3748; margin-bottom: 0.5rem; }
-        .instructions p { color: #718096; line-height: 1.6; }
+        .instructions h3 { color: #1f2937; margin-bottom: 0.5rem; }
+        .instructions p { color: #6b7280; line-height: 1.6; }
         .btn {
             display: inline-block;
             padding: 1rem 2rem;
-            background: #e2e8f0;
-            color: #4a5568;
+            background: #f3f4f6;
+            color: #4b5563;
             border-radius: 10px;
             text-decoration: none;
             font-weight: 600;
             margin-top: 1rem;
+            transition: background 0.2s;
+            border: 1px solid #e5e7eb;
         }
-        .btn:hover { background: #cbd5e0; }
+        .btn:hover { background: #e5e7eb; }
     </style>
     <script>
+        const MEETING_DURATION = 120; // 2 minutes in seconds
+        const storageKey = 'meeting_start_" # Nat.toText(itemId) # "';
+
+        // Initialize start time
+        let startTime = localStorage.getItem(storageKey);
+        if (!startTime) {
+            startTime = Date.now();
+            localStorage.setItem(storageKey, startTime);
+        } else {
+            startTime = parseInt(startTime);
+        }
+
+        function updateCountdown() {
+            const countdownEl = document.getElementById('countdown');
+            if (!countdownEl) return;
+
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const remainingSeconds = Math.max(0, MEETING_DURATION - elapsed);
+
+            const minutes = Math.floor(remainingSeconds / 60);
+            const seconds = remainingSeconds % 60;
+            countdownEl.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+
+            if (remainingSeconds === 0) {
+                localStorage.removeItem(storageKey);
+            }
+        }
+
+        setInterval(updateCountdown, 1000);
+        updateCountdown();
+
+        // Poll less frequently to check meeting status
         setInterval(() => {
             fetch('/meeting/active?items=" # Nat.toText(itemId) # "')
                 .then(r => r.text())
                 .then(html => {
-                    if (html.includes('Meeting Active')) {
-                        window.location.reload();
+                    if (html.includes('Réunion Active') || html.includes('Meeting Active')) {
+                        window.location.href = '/meeting/active?items=" # Nat.toText(itemId) # "';
                     }
                 })
-                .catch(e => console.log('Polling...'));
-        }, 2000);
+                .catch(e => console.log('Vérification...'));
+        }, 3000);
     </script>
 </head>
 <body>
     <div class=\"container\">
         <div class=\"card\">
             <div class=\"icon\">✅</div>
-            <h1>Meeting Started!</h1>
+            <h1>Réunion Démarrée !</h1>
             <div class=\"item-name\">" # item.name # "</div>
 
-            <div class=\"pulse\"></div>
+            <div class=\"spinner\"></div>
+
+            <div class=\"countdown\" id=\"countdown\">2:00</div>
+            <div class=\"countdown-label\">Temps restant pour rejoindre</div>
 
             <div class=\"instructions\">
-                <h3>📱 Waiting for more items...</h3>
-                <p>Have other participants scan their NFC tags now. They will automatically join this meeting session!</p>
-                <p style=\"margin-top: 1rem;\"><strong>Items in session: " # Nat.toText(itemsInSession.size()) # "</strong></p>
-                <p style=\"margin-top: 0.5rem; font-size: 0.9rem;\">Need at least 2 items to finalize the meeting.</p>
+                <h3>📱 En attente d'autres objets...</h3>
+                <p>Les autres participants peuvent scanner leurs tags NFC maintenant. Ils rejoindront automatiquement cette session de réunion !</p>
+                <p style=\"margin-top: 1rem;\"><strong>Objets dans la session : " # Nat.toText(itemsInSession.size()) # "</strong></p>
+                <p style=\"margin-top: 0.5rem; font-size: 0.9rem;\">Au moins 2 objets nécessaires pour finaliser la réunion.</p>
             </div>
 
-            <a href=\"/collection\" class=\"btn\">Cancel</a>
+            <a href=\"/collection\" class=\"btn\">Annuler</a>
         </div>
     </div>
 </body>
@@ -280,6 +347,7 @@ module {
         themeManager: Theme.ThemeManager
     ) : Text {
         let primary = themeManager.getPrimary();
+        let secondary = themeManager.getSecondary();
 
         // Generate list of scanned items
         var itemsHtml = "";
@@ -291,7 +359,7 @@ module {
                         <div class=\"item-icon\" style=\"background: " # primary # "; color: white; display: flex; align-items: center; justify-content: center; font-weight: 700;\">" # Nat.toText(item.id) # "</div>
                         <div class=\"item-info\">
                             <div class=\"item-name\">" # item.name # "</div>
-                            <div style=\"color: #718096; font-size: 0.9rem;\">Ready to receive 10 tokens</div>
+                            <div style=\"color: #6b7280; font-size: 0.9rem;\">Prêt à recevoir 10 jetons</div>
                         </div>
                     </div>";
                 };
@@ -300,45 +368,57 @@ module {
         };
 
         "<!DOCTYPE html>
-<html lang=\"en\">
+<html lang=\"fr\">
 <head>
     <meta charset=\"UTF-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-    <title>Meeting Active</title>
+    <title>Réunion Active</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            background: #ffffff;
             min-height: 100vh;
-            color: white;
+            color: #333;
             padding: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .container { max-width: 600px; margin: 0 auto; }
+        .container { max-width: 600px; width: 100%; }
         .card {
             background: white;
             border-radius: 20px;
             padding: 2rem;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 2px solid #f3f4f6;
             color: #333;
+            text-align: center;
         }
-        .header { text-align: center; margin-bottom: 2rem; }
-        .header h1 { font-size: 2rem; color: " # primary # "; margin-bottom: 0.5rem; }
-        .status-badge {
-            display: inline-block;
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            color: white;
-            font-weight: 600;
+        .icon { font-size: 4rem; margin-bottom: 1rem; }
+        h1 { font-size: 2rem; color: #1f2937; margin-bottom: 1rem; }
+
+        .countdown {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: " # primary # ";
+            margin: 1rem 0;
         }
+        .countdown-label {
+            font-size: 1rem;
+            color: #6b7280;
+            margin-bottom: 2rem;
+        }
+
         .items-section {
-            background: #f7fafc;
+            background: #f9fafb;
             padding: 1.5rem;
             border-radius: 15px;
             margin: 2rem 0;
+            border: 1px solid #e5e7eb;
+            text-align: left;
         }
-        .items-section h2 { color: #2d3748; margin-bottom: 1rem; font-size: 1.2rem; }
+        .items-section h2 { color: #1f2937; margin-bottom: 1rem; font-size: 1.2rem; }
         .item-entry {
             background: white;
             padding: 1rem;
@@ -348,6 +428,7 @@ module {
             display: flex;
             align-items: center;
             gap: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
         .item-entry:last-child { margin-bottom: 0; }
         .item-icon {
@@ -357,16 +438,17 @@ module {
             font-size: 1.2rem;
         }
         .item-info { flex: 1; }
-        .item-name { font-weight: 600; color: #2d3748; }
+        .item-name { font-weight: 600; color: #1f2937; }
         .instructions {
-            background: #d1fae5;
-            border-left: 4px solid #10b981;
+            background: #f9fafb;
             padding: 1.5rem;
             border-radius: 10px;
             margin: 2rem 0;
+            text-align: left;
+            border: 1px solid #e5e7eb;
         }
-        .instructions h3 { color: #065f46; margin-bottom: 0.5rem; }
-        .instructions p { color: #047857; line-height: 1.6; }
+        .instructions h3 { color: #1f2937; margin-bottom: 0.5rem; }
+        .instructions p { color: #6b7280; line-height: 1.6; }
         .actions {
             display: flex;
             gap: 1rem;
@@ -383,45 +465,84 @@ module {
             text-decoration: none;
             display: block;
             text-align: center;
-            transition: all 0.3s ease;
+            transition: opacity 0.2s;
         }
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: " # primary # ";
             color: white;
         }
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+            opacity: 0.9;
         }
         .btn-secondary {
-            background: #e2e8f0;
-            color: #4a5568;
+            background: #f3f4f6;
+            color: #4b5563;
+            border: 1px solid #e5e7eb;
         }
-        .btn-secondary:hover { background: #cbd5e0; }
+        .btn-secondary:hover { background: #e5e7eb; }
     </style>
+    <script>
+        const MEETING_DURATION = 120;
+        const storageKey = 'meeting_session_active';
+
+        // Use shared session storage - same key as waiting page
+        let startTime = localStorage.getItem(storageKey);
+        if (!startTime) {
+            startTime = Date.now();
+            localStorage.setItem(storageKey, startTime);
+        } else {
+            startTime = parseInt(startTime);
+            // If stored time is more than 5 minutes old, reset it
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            if (elapsed > 300) {
+                startTime = Date.now();
+                localStorage.setItem(storageKey, startTime);
+            }
+        }
+
+        function updateCountdown() {
+            const countdownEl = document.getElementById('countdown');
+            if (!countdownEl) return;
+
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const remainingSeconds = Math.max(0, MEETING_DURATION - elapsed);
+
+            const minutes = Math.floor(remainingSeconds / 60);
+            const seconds = remainingSeconds % 60;
+            countdownEl.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+
+            if (remainingSeconds === 0) {
+                localStorage.removeItem(storageKey);
+            }
+        }
+
+        setInterval(updateCountdown, 1000);
+        updateCountdown();
+    </script>
 </head>
 <body>
     <div class=\"container\">
         <div class=\"card\">
-            <div class=\"header\">
-                <h1>Meeting Active</h1>
-                <span class=\"status-badge\">✅ Ready to Finalize</span>
-            </div>
+            <div class=\"icon\">🎉</div>
+            <h1>Réunion Active</h1>
+
+            <div class=\"countdown\" id=\"countdown\">2:00</div>
+            <div class=\"countdown-label\">Temps restant pour rejoindre</div>
 
             <div class=\"items-section\">
-                <h2>Participants (" # Nat.toText(itemsInSession.size()) # " items)</h2>
+                <h2>Participants (" # Nat.toText(itemsInSession.size()) # " objets)</h2>
                 " # itemsHtml # "
             </div>
 
             <div class=\"instructions\">
-                <h3>🎉 Ready to Finalize!</h3>
-                <p>You have enough participants! Click \"Finalize Meeting\" to distribute 10 tokens to each item.</p>
-                <p style=\"margin-top: 0.5rem;\">Or scan more NFC tags to add more participants to this meeting.</p>
+                <h3>🎉 Prêt à Finaliser !</h3>
+                <p>Vous avez assez de participants ! Cliquez sur \"Finaliser la Réunion\" pour distribuer 10 jetons à chaque objet.</p>
+                <p style=\"margin-top: 0.5rem;\">Ou scannez plus de tags NFC pour ajouter plus de participants à cette réunion.</p>
             </div>
 
             <div class=\"actions\">
-                <a href=\"/collection\" class=\"btn btn-secondary\">Cancel</a>
-                <a href=\"/meeting/finalize_session\" class=\"btn btn-primary\">Finalize Meeting</a>
+                <a href=\"/collection\" class=\"btn btn-secondary\">Annuler</a>
+                <a href=\"/meeting/finalize_session\" class=\"btn btn-primary\">Finaliser la Réunion</a>
             </div>
         </div>
     </div>
@@ -436,6 +557,7 @@ module {
         themeManager: Theme.ThemeManager
     ) : Text {
         let primary = themeManager.getPrimary();
+        let secondary = themeManager.getSecondary();
 
         // Generate list of rewarded items
         var itemsHtml = "";
@@ -447,7 +569,7 @@ module {
                         <div class=\"item-icon\" style=\"background: " # primary # "; color: white; display: flex; align-items: center; justify-content: center; font-weight: 700;\">" # Nat.toText(item.id) # "</div>
                         <div class=\"item-info\">
                             <div class=\"item-name\">" # item.name # "</div>
-                            <div class=\"item-tokens\">+10 Tokens</div>
+                            <div class=\"item-tokens\">+10 Jetons</div>
                         </div>
                     </div>";
                 };
@@ -456,18 +578,18 @@ module {
         };
 
         "<!DOCTYPE html>
-<html lang=\"en\">
+<html lang=\"fr\">
 <head>
     <meta charset=\"UTF-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-    <title>Meeting Success!</title>
+    <title>Réunion Réussie !</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            background: #ffffff;
             min-height: 100vh;
-            color: white;
+            color: #333;
             padding: 2rem;
             display: flex;
             align-items: center;
@@ -478,7 +600,8 @@ module {
             background: white;
             border-radius: 20px;
             padding: 3rem 2rem;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 2px solid #f3f4f6;
             color: #333;
             text-align: center;
         }
@@ -493,12 +616,12 @@ module {
             50% { transform: scale(1.1) rotate(10deg); }
             75% { transform: scale(1.2) rotate(-10deg); }
         }
-        h1 { font-size: 2.5rem; color: " # primary # "; margin-bottom: 0.5rem; }
-        .subtitle { font-size: 1.2rem; color: #718096; margin-bottom: 2rem; }
+        h1 { font-size: 2.5rem; color: #1f2937; margin-bottom: 0.5rem; }
+        .subtitle { font-size: 1.2rem; color: #6b7280; margin-bottom: 2rem; }
         .reward-badge {
             display: inline-block;
             padding: 1rem 2rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: " # primary # ";
             color: white;
             border-radius: 50px;
             font-size: 1.5rem;
@@ -506,13 +629,14 @@ module {
             margin: 1rem 0 2rem 0;
         }
         .items-rewarded {
-            background: #f7fafc;
+            background: #f9fafb;
             padding: 1.5rem;
             border-radius: 15px;
             margin: 2rem 0;
             text-align: left;
+            border: 1px solid #e5e7eb;
         }
-        .items-rewarded h2 { color: #2d3748; margin-bottom: 1rem; font-size: 1.2rem; }
+        .items-rewarded h2 { color: #1f2937; margin-bottom: 1rem; font-size: 1.2rem; }
         .item-entry {
             background: white;
             padding: 1rem;
@@ -522,6 +646,7 @@ module {
             display: flex;
             align-items: center;
             gap: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
         .item-entry:last-child { margin-bottom: 0; }
         .item-icon {
@@ -530,8 +655,8 @@ module {
             border-radius: 8px;
         }
         .item-info { flex: 1; }
-        .item-name { font-weight: 600; color: #2d3748; margin-bottom: 0.25rem; }
-        .item-tokens { color: #10b981; font-weight: 700; }
+        .item-name { font-weight: 600; color: #1f2937; margin-bottom: 0.25rem; }
+        .item-tokens { color: " # secondary # "; font-weight: 700; }
         .actions {
             display: flex;
             gap: 1rem;
@@ -547,40 +672,44 @@ module {
             text-decoration: none;
             display: block;
             text-align: center;
-            transition: all 0.3s ease;
+            transition: opacity 0.2s;
         }
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: " # primary # ";
             color: white;
         }
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+            opacity: 0.9;
         }
         .btn-secondary {
-            background: #e2e8f0;
-            color: #4a5568;
+            background: #f3f4f6;
+            color: #4b5563;
+            border: 1px solid #e5e7eb;
         }
-        .btn-secondary:hover { background: #cbd5e0; }
+        .btn-secondary:hover { background: #e5e7eb; }
     </style>
+    <script>
+        // Clear the meeting session storage on success page
+        localStorage.removeItem('meeting_session_active');
+    </script>
 </head>
 <body>
     <div class=\"container\">
         <div class=\"card\">
             <div class=\"icon\">🎉</div>
-            <h1>Meeting Completed!</h1>
-            <p class=\"subtitle\">Tokens distributed to all participants</p>
+            <h1>Réunion Terminée !</h1>
+            <p class=\"subtitle\">Jetons distribués à tous les participants</p>
 
-            <div class=\"reward-badge\">+10 Tokens Each</div>
+            <div class=\"reward-badge\">+10 Jetons Chacun</div>
 
             <div class=\"items-rewarded\">
-                <h2>Participants (" # Nat.toText(itemIds.size()) # " items)</h2>
+                <h2>Participants (" # Nat.toText(itemIds.size()) # " objets)</h2>
                 " # itemsHtml # "
             </div>
 
             <div class=\"actions\">
-                <a href=\"/collection\" class=\"btn btn-secondary\">View Collection</a>
-                <a href=\"/\" class=\"btn btn-primary\">Home</a>
+                <a href=\"/collection\" class=\"btn btn-secondary\">Voir la Collection</a>
+                <a href=\"/\" class=\"btn btn-primary\">Accueil</a>
             </div>
         </div>
     </div>

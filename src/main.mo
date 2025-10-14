@@ -163,7 +163,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                                                         "/meeting/active?items=" # itemsText
                                                     };
 
-                                                    let html = "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0;url=" # redirectUrl # "'></head><body>✅ Scanned! Redirecting...</body></html>";
+                                                    let html = "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0;url=" # redirectUrl # "'></head><body> Scanned! Redirecting...</body></html>";
 
                                                     return {
                                                         statusCode = 200;

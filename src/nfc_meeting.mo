@@ -87,38 +87,67 @@ module {
         message: Text,
         isError: Bool
     ) : Text {
-        let bgColor = if (isError) { "#ef4444" } else { "#10b981" };
+        let accentColor = if (isError) { "#ef4444" } else { "#10b981" };
         let icon = if (isError) { "⚠️" } else { "✅" };
 
         "<!DOCTYPE html>
-<html lang=\"en\">
+<html lang=\"fr\">
 <head>
     <meta charset=\"UTF-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-    <title>NFC Scan</title>
+    <title>Scan NFC</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: " # bgColor # ";
+            background: #ffffff;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
+            color: #1f2937;
             text-align: center;
             padding: 2rem;
         }
+        .container {
+            max-width: 400px;
+            width: 100%;
+        }
         .message {
-            font-size: 3rem;
-            margin-bottom: 1rem;
+            font-size: 5rem;
+            margin-bottom: 2rem;
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
         }
         h1 {
             font-size: 1.5rem;
-            margin-bottom: 1rem;
+            margin-bottom: 3rem;
+            font-weight: 600;
+            color: #374151;
         }
-        p {
-            font-size: 1rem;
-            opacity: 0.9;
+        .spinner {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 2rem;
+            border: 5px solid #f3f4f6;
+            border-top-color: " # accentColor # ";
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .status {
+            font-size: 0.875rem;
+            color: #9ca3af;
+            font-weight: 500;
         }
     </style>
     <script>
@@ -128,10 +157,11 @@ module {
     </script>
 </head>
 <body>
-    <div>
+    <div class=\"container\">
         <div class=\"message\">" # icon # "</div>
         <h1>" # message # "</h1>
-        <p>Redirecting...</p>
+        <div class=\"spinner\"></div>
+        <p class=\"status\">•••</p>
     </div>
 </body>
 </html>"
