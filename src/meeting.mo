@@ -172,6 +172,7 @@ module {
         itemId: Nat,
         item: Collection.Item,
         itemsInSession: [Nat],
+        meetingStartTime: Text,
         themeManager: Theme.ThemeManager
     ) : Text {
         let primary = themeManager.getPrimary();
@@ -271,16 +272,21 @@ module {
     </style>
     <script>
         const MEETING_DURATION = 120; // 2 minutes in seconds
-        const storageKey = 'meeting_start_" # Nat.toText(itemId) # "';
+        const storageKey = 'meeting_session_active';
 
-        // Initialize start time
-        let startTime = localStorage.getItem(storageKey);
-        if (!startTime) {
-            startTime = Date.now();
-            localStorage.setItem(storageKey, startTime);
-        } else {
-            startTime = parseInt(startTime);
-        }
+        // Get server timestamp (in nanoseconds) and convert to milliseconds
+        const serverStartTimeNanos = " # meetingStartTime # ";
+        const serverStartTimeMs = Math.floor(serverStartTimeNanos / 1000000);
+
+        console.log('[Waiting Page] Server timestamp (ms):', serverStartTimeMs);
+        console.log('[Waiting Page] Server time:', new Date(serverStartTimeMs).toISOString());
+
+        // Always use server timestamp as source of truth
+        let startTime = serverStartTimeMs;
+        localStorage.setItem(storageKey, String(startTime));
+
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        console.log('[Waiting Page] Timer synchronized with backend - elapsed:', elapsed, 'seconds');
 
         function updateCountdown() {
             const countdownEl = document.getElementById('countdown');
@@ -294,24 +300,17 @@ module {
             countdownEl.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
 
             if (remainingSeconds === 0) {
+                console.log('[Waiting Page] Timer expired - auto-finalizing meeting');
                 localStorage.removeItem(storageKey);
+                // Reload page - backend will detect expiration and auto-finalize
+                window.location.reload();
             }
         }
 
         setInterval(updateCountdown, 1000);
         updateCountdown();
 
-        // Poll less frequently to check meeting status
-        setInterval(() => {
-            fetch('/meeting/active?items=" # Nat.toText(itemId) # "')
-                .then(r => r.text())
-                .then(html => {
-                    if (html.includes('Réunion Active') || html.includes('Meeting Active')) {
-                        window.location.href = '/meeting/active?items=" # Nat.toText(itemId) # "';
-                    }
-                })
-                .catch(e => console.log('Vérification...'));
-        }, 3000);
+        // No polling needed - when a second item is scanned, the server will redirect automatically
     </script>
 </head>
 <body>
@@ -344,6 +343,7 @@ module {
     public func generateActiveSessionPage(
         itemsInSession: [Nat],
         allItems: [Collection.Item],
+        meetingStartTime: Text,
         themeManager: Theme.ThemeManager
     ) : Text {
         let primary = themeManager.getPrimary();
@@ -485,20 +485,19 @@ module {
         const MEETING_DURATION = 120;
         const storageKey = 'meeting_session_active';
 
-        // Use shared session storage - same key as waiting page
-        let startTime = localStorage.getItem(storageKey);
-        if (!startTime) {
-            startTime = Date.now();
-            localStorage.setItem(storageKey, startTime);
-        } else {
-            startTime = parseInt(startTime);
-            // If stored time is more than 5 minutes old, reset it
-            const elapsed = Math.floor((Date.now() - startTime) / 1000);
-            if (elapsed > 300) {
-                startTime = Date.now();
-                localStorage.setItem(storageKey, startTime);
-            }
-        }
+        // Get server timestamp (in nanoseconds) and convert to milliseconds
+        const serverStartTimeNanos = " # meetingStartTime # ";
+        const serverStartTimeMs = Math.floor(serverStartTimeNanos / 1000000);
+
+        console.log('[Active Page] Server timestamp (ms):', serverStartTimeMs);
+        console.log('[Active Page] Server time:', new Date(serverStartTimeMs).toISOString());
+
+        // Always use server timestamp as source of truth
+        let startTime = serverStartTimeMs;
+        localStorage.setItem(storageKey, String(startTime));
+
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        console.log('[Active Page] Timer synchronized with backend - elapsed:', elapsed, 'seconds');
 
         function updateCountdown() {
             const countdownEl = document.getElementById('countdown');
@@ -512,7 +511,10 @@ module {
             countdownEl.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
 
             if (remainingSeconds === 0) {
+                console.log('[Active Page] Timer expired - auto-finalizing meeting');
                 localStorage.removeItem(storageKey);
+                // Reload page - backend will detect expiration and auto-finalize
+                window.location.reload();
             }
         }
 

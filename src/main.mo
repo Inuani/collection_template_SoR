@@ -19,6 +19,8 @@ import Theme "theme";
 import Buttons "buttons";
 import NFCMeeting "nfc_meeting";
 import Nat "mo:core/Nat";
+import Int "mo:core/Int";
+import Time "mo:core/Time";
 import Scan "scan";
 import Iter "mo:core/Iter";
 import Array "mo:core/Array";
@@ -155,6 +157,9 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                                                         first := false;
                                                     };
                                                     session.set("meeting_items", itemsText);
+
+                                                    // Store/update meeting timestamp - reset timer on each new scan
+                                                    session.set("meeting_start_time", Int.toText(Time.now()));
 
                                                     // Redirect to meeting page
                                                     let redirectUrl = if (updatedItems.size() == 1) {

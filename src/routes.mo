@@ -6,6 +6,8 @@ import Session      "mo:liminal/Session";
 import Liminal      "mo:liminal";
 import Text "mo:core/Text";
 import Nat "mo:core/Nat";
+import Int "mo:core/Int";
+import Time "mo:core/Time";
 import Blob "mo:core/Blob";
 import Iter "mo:core/Iter";
 import Array "mo:core/Array";
@@ -107,6 +109,60 @@ module Routes {
                 return ctx.buildResponse(#ok, #html(html));
             };
 
+            // Check if meeting has expired (2 minutes = 120 seconds = 120_000_000_000 nanoseconds)
+            let meetingExpired = switch (ctx.httpContext.session) {
+                case null { false };
+                case (?session) {
+                    switch (session.get("meeting_start_time")) {
+                        case null { false };
+                        case (?startTimeText) {
+                            switch (Int.fromText(startTimeText)) {
+                                case null { false };
+                                case (?startTime) {
+                                    let elapsed = Time.now() - startTime;
+                                    let twoMinutesInNanos : Int = 120_000_000_000;
+                                    elapsed > twoMinutesInNanos
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+
+            // If meeting expired and we have 2+ items, auto-finalize
+            if (meetingExpired and itemsInSession.size() >= 2) {
+                // Award tokens to all items
+                for (itemId in itemsInSession.vals()) {
+                    ignore collection.addTokens(itemId, 10);
+                };
+
+                // Build items text for redirect
+                var itemsText = "";
+                var first = true;
+                for (id in itemsInSession.vals()) {
+                    if (not first) { itemsText #= "," };
+                    itemsText #= Nat.toText(id);
+                    first := false;
+                };
+
+                // Clear session
+                switch (ctx.httpContext.session) {
+                    case null {};
+                    case (?session) {
+                        session.remove("meeting_items");
+                        session.remove("meeting_start_time");
+                    };
+                };
+
+                // Redirect to success page
+                return {
+                    statusCode = 303;
+                    headers = [("Location", "/meeting/success?items=" # itemsText)];
+                    body = null;
+                    streamingStrategy = null;
+                };
+            };
+
             let firstItemId = itemsInSession[0];
             switch (collection.getItem(firstItemId)) {
                 case null {
@@ -114,7 +170,17 @@ module Routes {
                     ctx.buildResponse(#notFound, #html(html))
                 };
                 case (?item) {
-                    let html = Meeting.generateWaitingPage(firstItemId, item, itemsInSession, themeManager);
+                    // Get meeting start time from session to pass to frontend
+                    let meetingStartTime = switch (ctx.httpContext.session) {
+                        case null { "0" };
+                        case (?session) {
+                            switch (session.get("meeting_start_time")) {
+                                case null { "0" };
+                                case (?time) { time };
+                            };
+                        };
+                    };
+                    let html = Meeting.generateWaitingPage(firstItemId, item, itemsInSession, meetingStartTime, themeManager);
                     ctx.buildResponse(#ok, #html(html))
                 };
             }
@@ -152,8 +218,72 @@ module Routes {
                 };
             };
 
+            // Check if meeting has expired (2 minutes = 120 seconds = 120_000_000_000 nanoseconds)
+            let meetingExpired = switch (ctx.httpContext.session) {
+                case null { false };
+                case (?session) {
+                    switch (session.get("meeting_start_time")) {
+                        case null { false };
+                        case (?startTimeText) {
+                            switch (Int.fromText(startTimeText)) {
+                                case null { false };
+                                case (?startTime) {
+                                    let elapsed = Time.now() - startTime;
+                                    let twoMinutesInNanos : Int = 120_000_000_000;
+                                    elapsed > twoMinutesInNanos
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+
+            // If meeting expired, auto-finalize
+            if (meetingExpired) {
+                // Award tokens to all items
+                for (itemId in itemsInSession.vals()) {
+                    ignore collection.addTokens(itemId, 10);
+                };
+
+                // Build items text for redirect
+                var itemsText = "";
+                var first = true;
+                for (id in itemsInSession.vals()) {
+                    if (not first) { itemsText #= "," };
+                    itemsText #= Nat.toText(id);
+                    first := false;
+                };
+
+                // Clear session
+                switch (ctx.httpContext.session) {
+                    case null {};
+                    case (?session) {
+                        session.remove("meeting_items");
+                        session.remove("meeting_start_time");
+                    };
+                };
+
+                // Redirect to success page
+                return {
+                    statusCode = 303;
+                    headers = [("Location", "/meeting/success?items=" # itemsText)];
+                    body = null;
+                    streamingStrategy = null;
+                };
+            };
+
             let allItems = collection.getAllItems();
-            let html = Meeting.generateActiveSessionPage(itemsInSession, allItems, themeManager);
+            // Get meeting start time from session to pass to frontend
+            let meetingStartTime = switch (ctx.httpContext.session) {
+                case null { "0" };
+                case (?session) {
+                    switch (session.get("meeting_start_time")) {
+                        case null { "0" };
+                        case (?time) { time };
+                    };
+                };
+            };
+            let html = Meeting.generateActiveSessionPage(itemsInSession, allItems, meetingStartTime, themeManager);
             ctx.buildResponse(#ok, #html(html))
         }),
 
@@ -204,6 +334,7 @@ module Routes {
                 case null {};
                 case (?session) {
                     session.remove("meeting_items");
+                    session.remove("meeting_start_time");
                 };
             };
 
