@@ -8,7 +8,7 @@ import App "mo:liminal/App";
 import HttpContext "mo:liminal/HttpContext";
 import SessionMiddleware "mo:liminal/Middleware/Session";
 import ProtectedRoutes "../nfc_protec_routes";
-import Scan "../scan";
+import Scan "../utils/scan";
 import InvalidScan "../utils/invalid_scan";
 import Theme "../utils/theme";
 

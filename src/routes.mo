@@ -8,6 +8,7 @@ import Blob "mo:core/Blob";
 import Array "mo:core/Array";
 // import Route "mo:liminal/Route";
 import Collection "collection";
+import CollectionView "collection_view";
 import Home "home";
 import Theme "utils/theme";
 import Files "files";
@@ -44,16 +45,16 @@ module Routes {
                    let id = switch (Nat.fromText(idText)) {
                        case (?num) num;
                        case null {
-                           let html = collection.generateNotFoundPage(0, themeManager);
+                           let html = CollectionView.generateNotFoundPage(0, themeManager);
                            return ctx.buildResponse(#notFound, #html(html));
                        };
                    };
 
-                   let html = collection.generateItemPage(id, themeManager);
+                   let html = CollectionView.generateItemPage(collection, id, themeManager);
                    ctx.buildResponse(#ok, #html(html))
                }),
                Router.getQuery("/collection", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
-                   let html = collection.generateCollectionPage(themeManager);
+                   let html = CollectionView.generateCollectionPage(collection, themeManager);
                    ctx.buildResponse(#ok, #html(html))
                }),
 
@@ -63,12 +64,12 @@ module Routes {
                    let id = switch (Nat.fromText(idText)) {
                        case (?num) num;
                        case null {
-                           let html = collection.generateNotFoundPage(0, themeManager);
+                           let html = CollectionView.generateNotFoundPage(0, themeManager);
                            return ctx.buildResponse(#notFound, #html(html));
                        };
                    };
 
-                   let html = collection.generateItemPage(id, themeManager);
+                   let html = CollectionView.generateItemPage(collection, id, themeManager);
                    ctx.buildResponse(#ok, #html(html))
                }),
 

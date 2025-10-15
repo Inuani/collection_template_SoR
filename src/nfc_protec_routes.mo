@@ -3,7 +3,7 @@ import Map "mo:core/Map";
 import Iter "mo:core/Iter";
 import Array "mo:core/Array";
 import Option "mo:core/Option";
-import Scan "scan";
+import Scan "utils/scan";
 
 module {
     public type ProtectedRoute = {

@@ -15,6 +15,10 @@ import Result "mo:core/Result";
 import RouterMiddleware "mo:liminal/Middleware/Router";
 import Theme "utils/theme";
 import Buttons "utils/buttons";
+import FileService "services/file_service";
+import CollectionService "services/collection_service";
+import MeetingService "services/meeting_service";
+import AssetService "services/asset_service";
 
 shared ({ caller = initializer }) persistent actor class Actor() = self {
 
@@ -39,6 +43,9 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     let buttonsState = Buttons.init();
     transient let buttonsManager = Buttons.ButtonsManager(buttonsState);
 
+    transient let fileService = FileService.make(file_storage);
+    transient let collectionService = CollectionService.make(initializer, collection);
+    transient let meetingService = MeetingService.make(collection);
 
     transient let setPermissions : HttpAssets.SetPermissions = {
         commit = [initializer];
@@ -47,6 +54,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     };
     transient var assetStore = HttpAssets.Assets(assetStableData, ?setPermissions);
     transient var assetCanister = AssetCanister.AssetCanister(assetStore);
+    transient let assetService = AssetService.make(assetCanister);
 
     transient let assetMiddlewareConfig : AssetsMiddleware.Config = {
         store = assetStore;
@@ -79,7 +87,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
             AssetsMiddleware.new(assetMiddlewareConfig),
             RouterMiddleware.new(Routes.routerConfig(
                 Principal.toText(canisterId),
-                file_storage.getFileChunk,
+                fileService.getFileChunk,
                 collection,
                 themeManager,
                 file_storage,
@@ -110,138 +118,117 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     };
 
     public func upload(chunk : [Nat8]) : async () {
-        file_storage.upload(chunk);
-      };
+        fileService.upload(chunk);
+    };
 
-      public func uploadFinalize(title : Text, artist : Text, contentType : Text) : async Result.Result<Text, Text> {
-        let uploadResult = file_storage.uploadFinalize(title, artist, contentType);
+    public func uploadFinalize(title : Text, artist : Text, contentType : Text) : async Result.Result<Text, Text> {
+        fileService.uploadFinalize(title, artist, contentType);
+    };
 
-        switch (uploadResult) {
-          case (#ok(msg)) {
-            #ok(msg);
-          };
-          case (#err(msg)) {
-            #err(msg);
-          };
-        };
-      };
-
-      public query func getFileChunk(title : Text, chunkId : ChunkId) : async ?{
+    public query func getFileChunk(title : Text, chunkId : ChunkId) : async ?{
         chunk : [Nat8];
         totalChunks : Nat;
         contentType : Text;
         title : Text;
         artist : Text;
-      } {
-        file_storage.getFileChunk(title, chunkId);
-      };
+    } {
+        fileService.getFileChunk(title, chunkId);
+    };
 
-      public query func listFiles() : async [(Text, Text, Text)] {
-        file_storage.listFiles();
-      };
+    public query func listFiles() : async [(Text, Text, Text)] {
+        fileService.listFiles();
+    };
 
-      public func deleteFile(title : Text) : async Bool {
-        file_storage.deleteFile(title);
-      };
+    public func deleteFile(title : Text) : async Bool {
+        fileService.deleteFile(title);
+    };
 
-      public query func getStoredFileCount() : async Nat {
-          file_storage.getStoredFileCount();
-      };
+    public query func getStoredFileCount() : async Nat {
+        fileService.getStoredFileCount();
+    };
 
-      // ============================================
-      // COLLECTION MANAGEMENT FUNCTIONS (Admin Only)
-      // ============================================
+    // ============================================
+    // COLLECTION MANAGEMENT FUNCTIONS (Admin Only)
+    // ============================================
 
-      public shared ({ caller }) func addCollectionItem(
-          name: Text,
-          thumbnailUrl: Text,
-          imageUrl: Text,
-          description: Text,
-          rarity: Text,
-          attributes: [(Text, Text)]
-      ) : async Nat {
-          assert (caller == initializer);
-          collection.addItem(name, thumbnailUrl, imageUrl, description, rarity, attributes)
-      };
+    public shared ({ caller }) func addCollectionItem(
+        name: Text,
+        thumbnailUrl: Text,
+        imageUrl: Text,
+        description: Text,
+        rarity: Text,
+        attributes: [(Text, Text)]
+    ) : async Nat {
+        collectionService.addItem(caller, name, thumbnailUrl, imageUrl, description, rarity, attributes)
+    };
 
-      public shared ({ caller }) func updateCollectionItem(
-          id: Nat,
-          name: Text,
-          thumbnailUrl: Text,
-          imageUrl: Text,
-          description: Text,
-          rarity: Text,
-          attributes: [(Text, Text)]
-      ) : async Result.Result<(), Text> {
-          assert (caller == initializer);
-          collection.updateItem(id, name, thumbnailUrl, imageUrl, description, rarity, attributes)
-      };
+    public shared ({ caller }) func updateCollectionItem(
+        id: Nat,
+        name: Text,
+        thumbnailUrl: Text,
+        imageUrl: Text,
+        description: Text,
+        rarity: Text,
+        attributes: [(Text, Text)]
+    ) : async Result.Result<(), Text> {
+        collectionService.updateItem(caller, id, name, thumbnailUrl, imageUrl, description, rarity, attributes)
+    };
 
-      public shared ({ caller }) func deleteCollectionItem(id: Nat) : async Result.Result<(), Text> {
-          assert (caller == initializer);
-          collection.deleteItem(id)
-      };
+    public shared ({ caller }) func deleteCollectionItem(id: Nat) : async Result.Result<(), Text> {
+        collectionService.deleteItem(caller, id)
+    };
 
-      public query func getCollectionItem(id: Nat) : async ?Collection.Item {
-          collection.getItem(id)
-      };
+    public query func getCollectionItem(id: Nat) : async ?Collection.Item {
+        collectionService.getItem(id)
+    };
 
-      public query func getAllCollectionItems() : async [Collection.Item] {
-          collection.getAllItems()
-      };
+    public query func getAllCollectionItems() : async [Collection.Item] {
+        collectionService.getAllItems()
+    };
 
-      public query func getCollectionItemCount() : async Nat {
-          collection.getItemCount()
-      };
+    public query func getCollectionItemCount() : async Nat {
+        collectionService.getItemCount()
+    };
 
-      public shared ({ caller }) func setCollectionName(name: Text) : async () {
-          assert (caller == initializer);
-          collection.setCollectionName(name)
-      };
+    public shared ({ caller }) func setCollectionName(name: Text) : async () {
+        collectionService.setCollectionName(caller, name)
+    };
 
-      public shared ({ caller }) func setCollectionDescription(description: Text) : async () {
-          assert (caller == initializer);
-          collection.setCollectionDescription(description)
-      };
+    public shared ({ caller }) func setCollectionDescription(description: Text) : async () {
+        collectionService.setCollectionDescription(caller, description)
+    };
 
-      public query func getCollectionName() : async Text {
-          collection.getCollectionName()
-      };
+    public query func getCollectionName() : async Text {
+        collectionService.getCollectionName()
+    };
 
-      public query func getCollectionDescription() : async Text {
-          collection.getCollectionDescription()
-      };
+    public query func getCollectionDescription() : async Text {
+        collectionService.getCollectionDescription()
+    };
 
-      // ============================================
-      // PROOF-OF-MEETING API FUNCTIONS
-      // ============================================
+    // ============================================
+    // PROOF-OF-MEETING API FUNCTIONS
+    // ============================================
 
+    // Add tokens to an item
+    public shared func addTokens(itemId: Nat, amount: Nat) : async Result.Result<(), Text> {
+        meetingService.addTokens(itemId, amount)
+    };
 
+    // Record a meeting for multiple items
+    public shared func recordMeeting(itemIds: [Nat], meetingId: Text, tokensEarned: Nat) : async Result.Result<(), Text> {
+        meetingService.recordMeeting(itemIds, meetingId, tokensEarned)
+    };
 
+    // Get item's token balance
+    public query func getItemBalance(itemId: Nat) : async Result.Result<Nat, Text> {
+        meetingService.getItemBalance(itemId)
+    };
 
-      // Add tokens to an item
-      public shared func addTokens(itemId: Nat, amount: Nat) : async Result.Result<(), Text> {
-          collection.addTokens(itemId, amount)
-      };
-
-      // Record a meeting for multiple items
-      public shared func recordMeeting(itemIds: [Nat], meetingId: Text, tokensEarned: Nat) : async Result.Result<(), Text> {
-          collection.recordMeeting(itemIds, meetingId, tokensEarned)
-      };
-
-
-
-      // Get item's token balance
-      public query func getItemBalance(itemId: Nat) : async Result.Result<Nat, Text> {
-          collection.getItemBalance(itemId)
-      };
-
-      // Get item's meeting history
-      public query func getItemMeetingHistory(itemId: Nat) : async Result.Result<[Collection.MeetingRecord], Text> {
-          collection.getItemMeetingHistory(itemId)
-      };
-
-
+    // Get item's meeting history
+    public query func getItemMeetingHistory(itemId: Nat) : async Result.Result<[Collection.MeetingRecord], Text> {
+        meetingService.getItemMeetingHistory(itemId)
+    };
 
     assetStore.set_streaming_callback(http_request_streaming_callback);
 
@@ -266,7 +253,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     // };
 
     public shared query func list(args : {}) : async [HttpAssets.AssetDetails] {
-        assetCanister.list(args);
+        assetService.list(args);
     };
 
     // public shared ({ caller }) func store(args : HttpAssets.StoreArgs) : async () {
@@ -286,7 +273,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     // };
 
     public shared ({ caller }) func delete_asset(args : HttpAssets.DeleteAssetArguments) : async () {
-        assetCanister.delete_asset(caller, args);
+        assetService.deleteAsset(caller, args);
     };
 
     // public shared ({ caller }) func set_asset_properties(args : HttpAssets.SetAssetPropertiesArguments) : async () {
@@ -298,19 +285,19 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     // };
 
     public shared ({ caller }) func create_batch(args : {}) : async (HttpAssets.CreateBatchResponse) {
-        assetCanister.create_batch(caller, args);
+        assetService.createBatch(caller, args);
     };
 
     public shared ({ caller }) func create_chunk(args : HttpAssets.CreateChunkArguments) : async (HttpAssets.CreateChunkResponse) {
-        assetCanister.create_chunk(caller, args);
+        assetService.createChunk(caller, args);
     };
 
     public shared ({ caller }) func create_chunks(args : HttpAssets.CreateChunksArguments) : async HttpAssets.CreateChunksResponse {
-        await* assetCanister.create_chunks(caller, args);
+        await assetService.createChunks(caller, args);
     };
 
     public shared ({ caller }) func commit_batch(args : HttpAssets.CommitBatchArguments) : async () {
-        await* assetCanister.commit_batch(caller, args);
+        await assetService.commitBatch(caller, args);
     };
 
     // public shared ({ caller }) func propose_commit_batch(args : HttpAssets.CommitBatchArguments) : async () {

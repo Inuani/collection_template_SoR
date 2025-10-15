@@ -1,6 +1,6 @@
 const ffi = require("ffi-napi");
 const ref = require("ref-napi");
-const { exec } = require("child_process");
+const { spawn } = require("child_process");
 
 var dllPath = "./libuFCoder-x86_64.so";
 
@@ -20,35 +20,69 @@ const T4T_AUTHENTICATION = {
 
 function openURL(url, browser = "firefox") {
   let command;
+  let args;
   switch (process.platform) {
     case "darwin": // macOS
       if (browser === "chrome") {
-        command = `open -a "Google Chrome" "${url}"`;
+        command = "open";
+        args = ["-a", "Google Chrome", url];
       } else {
-        command = `open -a Firefox "${url}"`;
+        command = "open";
+        args = ["-a", "Firefox", url];
       }
       break;
     case "win32": // Windows
       if (browser === "chrome") {
-        command = `start chrome "${url}"`;
+        command = "cmd";
+        args = ["/c", "start", "", "chrome", url];
       } else {
-        command = `start firefox "${url}"`;
+        command = "cmd";
+        args = ["/c", "start", "", "firefox", url];
       }
       break;
     default: // Linux and others
       if (browser === "chrome") {
-        command = `google-chrome "${url}"`;
+        command = "google-chrome";
+        args = [url];
       } else {
-        command = `firefox "${url}"`;
+        command = "firefox";
+        args = [url];
       }
       break;
   }
 
-  exec(command, (error) => {
-    if (error) {
+  const spawnOptions = {
+    detached: true,
+    stdio: "ignore",
+  };
+
+  const launch = (cmd, cmdArgs, allowFallback = true) => {
+    try {
+      const child = spawn(cmd, cmdArgs, spawnOptions);
+      child.on("error", (error) => {
+        console.error("Error opening browser:", error);
+        if (
+          allowFallback &&
+          process.platform !== "win32" &&
+          process.platform !== "darwin"
+        ) {
+          launch("xdg-open", [url], false);
+        }
+      });
+      child.unref();
+    } catch (error) {
       console.error("Error opening browser:", error);
+      if (
+        allowFallback &&
+        process.platform !== "win32" &&
+        process.platform !== "darwin"
+      ) {
+        launch("xdg-open", [url], false);
+      }
     }
-  });
+  };
+
+  launch(command, args);
 }
 
 // Main function to read SDM data and open browser

@@ -11,6 +11,7 @@ import Debug "mo:core/Debug";
 import Collection "collection";
 import Theme "utils/theme";
 import Meeting "meeting";
+import MeetingSession "utils/meeting_session";
 
 module MeetingRoutes {
     // Returns all meeting-related routes
@@ -25,25 +26,8 @@ module MeetingRoutes {
                 let _itemIdTextOpt = ctx.getQueryParam("item");
 
                 // Get items from session (unwrap optional)
-                let itemsInSession = switch (ctx.httpContext.session) {
-                    case null { [] };
-                    case (?session) {
-                        switch (session.get("meeting_items")) {
-                            case null { [] };
-                            case (?itemsText) {
-                                let parts = Iter.toArray(Text.split(itemsText, #char ','));
-                                var items : [Nat] = [];
-                                for (part in parts.vals()) {
-                                    switch (Nat.fromText(part)) {
-                                        case (?n) { items := Array.concat(items, [n]); };
-                                        case null {};
-                                    };
-                                };
-                                items
-                            };
-                        };
-                    };
-                };
+                let sessionOpt = ctx.httpContext.session;
+                let itemsInSession = MeetingSession.getItems(sessionOpt);
 
                 if (itemsInSession.size() == 0) {
                     Debug.print("[Waiting Page] No items in session - showing error");
@@ -53,34 +37,20 @@ module MeetingRoutes {
 
                 Debug.print("[Waiting Page] Items in session: " # Nat.toText(itemsInSession.size()));
 
-                // Check if meeting has expired (1 minute = 60 seconds = 60_000_000_000 nanoseconds)
-                let meetingExpired = switch (ctx.httpContext.session) {
+                // Check if meeting has expired (1 minute window)
+                switch (sessionOpt) {
+                    case null { Debug.print("[Waiting Page] No session found"); };
+                    case (?_) {};
+                };
+                let now = Time.now();
+                let meetingExpired = MeetingSession.hasExpired(sessionOpt, now, MeetingSession.meetingTimeoutNanos);
+                switch (MeetingSession.getStartTime(sessionOpt)) {
                     case null {
-                        Debug.print("[Waiting Page] No session found");
-                        false
+                        Debug.print("[Waiting Page] Timer check skipped - missing or invalid start time");
                     };
-                    case (?session) {
-                        switch (session.get("meeting_start_time")) {
-                            case null {
-                                Debug.print("[Waiting Page] No meeting_start_time in session");
-                                false
-                            };
-                            case (?startTimeText) {
-                                switch (Int.fromText(startTimeText)) {
-                                    case null {
-                                        Debug.print("[Waiting Page] Invalid timestamp format: " # startTimeText);
-                                        false
-                                    };
-                                    case (?startTime) {
-                                        let elapsed = Time.now() - startTime;
-                                        let oneMinuteInNanos : Int = 60_000_000_000;
-                                        let elapsedSeconds = elapsed / 1_000_000_000;
-                                        Debug.print("[Waiting Page] Timer check - Elapsed: " # Int.toText(elapsedSeconds) # "s, Expired: " # (if (elapsed > oneMinuteInNanos) { "YES" } else { "NO" }));
-                                        elapsed > oneMinuteInNanos
-                                    };
-                                };
-                            };
-                        };
+                    case (?startTime) {
+                        let elapsedSeconds = (now - startTime) / 1_000_000_000;
+                        Debug.print("[Waiting Page] Timer check - Elapsed: " # Int.toText(elapsedSeconds) # "s, Expired: " # (if (meetingExpired) { "YES" } else { "NO" }));
                     };
                 };
 
@@ -95,23 +65,10 @@ module MeetingRoutes {
                     ignore collection.recordMeeting(itemsInSession, meetingId, 10);
 
                     // Build items text for redirect
-                    var itemsText = "";
-                    var first = true;
-                    for (id in itemsInSession.vals()) {
-                        if (not first) { itemsText #= "," };
-                        itemsText #= Nat.toText(id);
-                        first := false;
-                    };
+                    let itemsText = MeetingSession.itemsToText(itemsInSession);
 
                     // Clear session (including token)
-                    switch (ctx.httpContext.session) {
-                        case null {};
-                        case (?session) {
-                            session.remove("meeting_items");
-                            session.remove("meeting_start_time");
-                            session.remove("finalize_token");
-                        };
-                    };
+                    MeetingSession.clear(sessionOpt);
 
                     // Redirect to success page
                     return {
@@ -130,26 +87,10 @@ module MeetingRoutes {
                     };
                     case (?item) {
                         // Get meeting start time from session to pass to frontend
-                        let meetingStartTime = switch (ctx.httpContext.session) {
-                            case null { "0" };
-                            case (?session) {
-                                switch (session.get("meeting_start_time")) {
-                                    case null { "0" };
-                                    case (?time) { time };
-                                };
-                            };
-                        };
+                        let meetingStartTime = MeetingSession.getStartTimeText(sessionOpt);
 
                         // Get finalize token from session to pass to frontend
-                        let finalizeToken = switch (ctx.httpContext.session) {
-                            case null { "" };
-                            case (?session) {
-                                switch (session.get("finalize_token")) {
-                                    case null { "" };
-                                    case (?token) { token };
-                                };
-                            };
-                        };
+                        let finalizeToken = MeetingSession.getFinalizeToken(sessionOpt);
 
                         let html = Meeting.generateWaitingPage(item, itemsInSession, meetingStartTime, finalizeToken, themeManager);
                         ctx.buildResponse(#ok, #html(html))
@@ -161,25 +102,8 @@ module MeetingRoutes {
             Router.getQuery("/meeting/active", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
                 Debug.print("[ROUTE] /meeting/active accessed");
                 // Get items from session (unwrap optional)
-                let itemsInSession = switch (ctx.httpContext.session) {
-                    case null { [] };
-                    case (?session) {
-                        switch (session.get("meeting_items")) {
-                            case null { [] };
-                            case (?itemsText) {
-                                let parts = Iter.toArray(Text.split(itemsText, #char ','));
-                                var items : [Nat] = [];
-                                for (part in parts.vals()) {
-                                    switch (Nat.fromText(part)) {
-                                        case (?n) { items := Array.concat(items, [n]); };
-                                        case null {};
-                                    };
-                                };
-                                items
-                            };
-                        };
-                    };
-                };
+                let sessionOpt = ctx.httpContext.session;
+                let itemsInSession = MeetingSession.getItems(sessionOpt);
 
                 if (itemsInSession.size() < 2) {
                     return {
@@ -190,34 +114,20 @@ module MeetingRoutes {
                     };
                 };
 
-                // Check if meeting has expired (1 minute = 60 seconds = 60_000_000_000 nanoseconds)
-                let meetingExpired = switch (ctx.httpContext.session) {
+                // Check if meeting has expired (1 minute window)
+                switch (sessionOpt) {
+                    case null { Debug.print("[Active Page] No session found"); };
+                    case (?_) {};
+                };
+                let now = Time.now();
+                let meetingExpired = MeetingSession.hasExpired(sessionOpt, now, MeetingSession.meetingTimeoutNanos);
+                switch (MeetingSession.getStartTime(sessionOpt)) {
                     case null {
-                        Debug.print("[Active Page] No session found");
-                        false
+                        Debug.print("[Active Page] Timer check skipped - missing or invalid start time");
                     };
-                    case (?session) {
-                        switch (session.get("meeting_start_time")) {
-                            case null {
-                                Debug.print("[Active Page] No meeting_start_time in session");
-                                false
-                            };
-                            case (?startTimeText) {
-                                switch (Int.fromText(startTimeText)) {
-                                    case null {
-                                        Debug.print("[Active Page] Invalid timestamp format: " # startTimeText);
-                                        false
-                                    };
-                                    case (?startTime) {
-                                        let elapsed = Time.now() - startTime;
-                                        let oneMinuteInNanos : Int = 60_000_000_000;
-                                        let elapsedSeconds = elapsed / 1_000_000_000;
-                                        Debug.print("[Active Page] Timer check - Elapsed: " # Int.toText(elapsedSeconds) # "s, Expired: " # (if (elapsed > oneMinuteInNanos) { "YES" } else { "NO" }));
-                                        elapsed > oneMinuteInNanos
-                                    };
-                                };
-                            };
-                        };
+                    case (?startTime) {
+                        let elapsedSeconds = (now - startTime) / 1_000_000_000;
+                        Debug.print("[Active Page] Timer check - Elapsed: " # Int.toText(elapsedSeconds) # "s, Expired: " # (if (meetingExpired) { "YES" } else { "NO" }));
                     };
                 };
 
@@ -232,24 +142,11 @@ module MeetingRoutes {
                     ignore collection.recordMeeting(itemsInSession, meetingId, 10);
 
                     // Build items text for redirect
-                    var itemsText = "";
-                    var first = true;
-                    for (id in itemsInSession.vals()) {
-                        if (not first) { itemsText #= "," };
-                        itemsText #= Nat.toText(id);
-                        first := false;
-                    };
+                    let itemsText = MeetingSession.itemsToText(itemsInSession);
 
                     // Clear session (including token for one-time use)
-                    switch (ctx.httpContext.session) {
-                        case null {};
-                        case (?session) {
-                            session.remove("meeting_items");
-                            session.remove("meeting_start_time");
-                            session.remove("finalize_token"); // One-time use!
-                            Debug.print("[FINALIZE] Session cleared - token deleted");
-                        };
-                    };
+                    MeetingSession.clear(sessionOpt);
+                    Debug.print("[FINALIZE] Session cleared - token deleted");
 
                     // Redirect to success page
                     return {
@@ -262,26 +159,10 @@ module MeetingRoutes {
 
                 let allItems = collection.getAllItems();
                 // Get meeting start time from session to pass to frontend
-                let meetingStartTime = switch (ctx.httpContext.session) {
-                    case null { "0" };
-                    case (?session) {
-                        switch (session.get("meeting_start_time")) {
-                            case null { "0" };
-                            case (?time) { time };
-                        };
-                    };
-                };
+                let meetingStartTime = MeetingSession.getStartTimeText(sessionOpt);
 
                 // Get finalize token from session to pass to frontend
-                let finalizeToken = switch (ctx.httpContext.session) {
-                    case null { "" };
-                    case (?session) {
-                        switch (session.get("finalize_token")) {
-                            case null { "" };
-                            case (?token) { token };
-                        };
-                    };
-                };
+                let finalizeToken = MeetingSession.getFinalizeToken(sessionOpt);
 
                 let html = Meeting.generateActiveSessionPage(itemsInSession, allItems, meetingStartTime, finalizeToken, themeManager);
                 ctx.buildResponse(#ok, #html(html))
@@ -298,10 +179,8 @@ module MeetingRoutes {
                 Debug.print("[FINALIZE] URL token: " # (switch(urlToken) { case null "NONE"; case (?t) t }));
                 Debug.print("[FINALIZE] Manual flag: " # (switch(isManual) { case null "false"; case (?_) "true" }));
 
-                let sessionToken = switch (ctx.httpContext.session) {
-                    case null { null };
-                    case (?session) { session.get("finalize_token") };
-                };
+                let sessionOpt = ctx.httpContext.session;
+                let sessionToken = MeetingSession.getFinalizeTokenOpt(sessionOpt);
 
                 Debug.print("[FINALIZE] Session token: " # (switch(sessionToken) { case null "NONE"; case (?t) t }));
 
@@ -328,25 +207,7 @@ module MeetingRoutes {
                 };
 
                 // 2. Get items from session (unwrap optional)
-                let itemsInSession = switch (ctx.httpContext.session) {
-                    case null { [] };
-                    case (?session) {
-                        switch (session.get("meeting_items")) {
-                            case null { [] };
-                            case (?itemsText) {
-                                let parts = Iter.toArray(Text.split(itemsText, #char ','));
-                                var items : [Nat] = [];
-                                for (part in parts.vals()) {
-                                    switch (Nat.fromText(part)) {
-                                        case (?n) { items := Array.concat(items, [n]); };
-                                        case null {};
-                                    };
-                                };
-                                items
-                            };
-                        };
-                    };
-                };
+                let itemsInSession = MeetingSession.getItems(sessionOpt);
 
                 if (itemsInSession.size() < 2) {
                     Debug.print("[FINALIZE] REJECTED - Less than 2 items");
@@ -361,15 +222,7 @@ module MeetingRoutes {
                     // This is auto-finalization - verify timer expired
                     Debug.print("[FINALIZE] Auto-finalization - checking timer");
 
-                    let meetingStartTime = switch (ctx.httpContext.session) {
-                        case null { null };
-                        case (?session) {
-                            switch (session.get("meeting_start_time")) {
-                                case null { null };
-                                case (?timeText) { Int.fromText(timeText) };
-                            };
-                        };
-                    };
+                    let meetingStartTime = MeetingSession.getStartTime(sessionOpt);
 
                     switch (meetingStartTime) {
                         case null {
@@ -380,12 +233,12 @@ module MeetingRoutes {
                         case (?startTime) {
                             let elapsed = Time.now() - startTime;
                             let elapsedSeconds = elapsed / 1_000_000_000;
-                            let oneMinuteInNanos : Int = 60_000_000_000;
 
                             Debug.print("[FINALIZE] Timer elapsed: " # Int.toText(elapsedSeconds) # " seconds");
 
                             // Allow if >= 59 seconds (account for clock skew)
-                            if (elapsed < (oneMinuteInNanos - 1_000_000_000)) {
+                            let minThreshold = MeetingSession.meetingTimeoutNanos - 1_000_000_000;
+                            if (elapsed < minThreshold) {
                                 Debug.print("[FINALIZE] REJECTED - Timer not expired yet");
                                 let html = "<html><body><h1>Too Soon</h1><p>Please wait for the timer to complete, or use the manual finalize button.</p></body></html>";
                                 return ctx.buildResponse(#badRequest, #html(html));
@@ -410,23 +263,10 @@ module MeetingRoutes {
                 Debug.print("[FINALIZE] Tokens awarded and history recorded ✓");
 
                 // Generate success message
-                var itemsText = "";
-                var first = true;
-                for (id in itemsInSession.vals()) {
-                    if (not first) { itemsText #= "," };
-                    itemsText #= Nat.toText(id);
-                    first := false;
-                };
+                let itemsText = MeetingSession.itemsToText(itemsInSession);
 
                 // Clear session (including token)
-                switch (ctx.httpContext.session) {
-                    case null {};
-                    case (?session) {
-                        session.remove("meeting_items");
-                        session.remove("meeting_start_time");
-                        session.remove("finalize_token");
-                    };
-                };
+                MeetingSession.clear(sessionOpt);
 
                 // Redirect to success page
                 let redirectUrl = "/meeting/success?items=" # itemsText;
