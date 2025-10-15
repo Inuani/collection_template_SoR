@@ -1,8 +1,6 @@
 
 import Router       "mo:liminal/Router";
 import RouteContext "mo:liminal/RouteContext";
-import HttpContext  "mo:liminal/HttpContext";
-import Session      "mo:liminal/Session";
 import Liminal      "mo:liminal";
 import Text "mo:core/Text";
 import Nat "mo:core/Nat";

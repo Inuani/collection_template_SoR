@@ -1,9 +1,6 @@
 import Text "mo:core/Text";
 import Nat "mo:core/Nat";
-import Array "mo:core/Array";
 import Iter "mo:core/Iter";
-import Result "mo:core/Result";
-import Scan "scan";
 
 module {
     // Extract NFC parameters from URL

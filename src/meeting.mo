@@ -1,6 +1,5 @@
 import Text "mo:core/Text";
 import Nat "mo:core/Nat";
-import Int "mo:core/Int";
 import Array "mo:core/Array";
 import Collection "collection";
 import Theme "theme";
