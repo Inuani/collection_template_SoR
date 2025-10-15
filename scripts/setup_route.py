@@ -46,6 +46,7 @@ def setup_route_and_program(
     params: str = None,
     use_random_key: bool = False,
     ic_mode: bool = False,
+    cmac_count: int = 20000,
 ) -> bool:
     """Setup protected route and program NFC card."""
     try:
@@ -187,10 +188,10 @@ def setup_route_and_program(
                 )
                 return False
             print(f"Master key changed successfully to: {new_key_str}")
-            cmd = f"python3 scripts/hashed_cmacs.py -k {new_key_str} -u {card_uid} -c 20000 -o cmacs.json"
+            cmd = f"python3 scripts/hashed_cmacs.py -k {new_key_str} -u {card_uid} -c {cmac_count} -o cmacs.json"
         else:
             # Generate CMACs with default key
-            cmd = f"python3 scripts/hashed_cmacs.py -k 00000000000000000000000000000000 -u {card_uid} -c 200 -o cmacs.json"
+            cmd = f"python3 scripts/hashed_cmacs.py -k 00000000000000000000000000000000 -u {card_uid} -c {cmac_count} -o cmacs.json"
         exit_code, stdout, stderr = run_command(cmd)
         if exit_code != 0:
             print(f"Error generating CMACs: {stderr}")
@@ -255,11 +256,22 @@ def main():
         action="store_true",
         help="Use IC production mode (connects to ICP network instead of local replica)",
     )
+    parser.add_argument(
+        "--cmac-count",
+        type=int,
+        default=20000,
+        help="Number of CMACs to generate (default: 20000)",
+    )
 
     args = parser.parse_args()
 
     if setup_route_and_program(
-        args.canister_id, args.page, args.params, args.random_key, args.ic
+        args.canister_id,
+        args.page,
+        args.params,
+        args.random_key,
+        args.ic,
+        args.cmac_count,
     ):
         print("\nSetup completed successfully!")
     else:

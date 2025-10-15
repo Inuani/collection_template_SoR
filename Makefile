@@ -7,6 +7,7 @@ include .env
 REPLICA_URL := $(if $(filter ic,$(subst ',,$(DFX_NETWORK))),https://ic0.app,http://127.0.0.1:4943)
 CANISTER_NAME := $(shell grep "CANISTER_ID_" .env | grep -v "INTERNET_IDENTITY\|CANISTER_ID='" | head -1 | sed 's/CANISTER_ID_\([^=]*\)=.*/\1/' | tr '[:upper:]' '[:lower:]')
 CANISTER_ID := $(CANISTER_ID_$(shell echo $(CANISTER_NAME) | tr '[:lower:]' '[:upper:]'))
+CMAC_COUNT ?= 20000
 
 UNAME := $(shell uname)
 ifeq ($(UNAME), Darwin)
@@ -36,10 +37,10 @@ Isync:
 	icx-asset --replica https://ic0.app --pem ~/.config/dfx/identity/raygen/identity.pem sync $(CANISTER_ID) ./public
 
 protect:
-	python3 scripts/setup_route.py $(CANISTER_ID) meeting/3
+	python3 scripts/setup_route.py $(CANISTER_ID) item/1 --cmac-count 200
 
 protect_ic:
-	python3 scripts/setup_route.py $(CANISTER_ID) files/certificat_1 --ic --random-key
+	python3 scripts/setup_route.py $(CANISTER_ID) files/certificat_1 --cmac-count $(CMAC_COUNT) --ic --random-key
 
 reinstall:
 	dfx deploy $(CANISTER_NAME) --mode reinstall
