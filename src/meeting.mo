@@ -173,6 +173,7 @@ module {
         item: Collection.Item,
         itemsInSession: [Nat],
         meetingStartTime: Text,
+        finalizeToken: Text,
         themeManager: Theme.ThemeManager
     ) : Text {
         let primary = themeManager.getPrimary();
@@ -305,7 +306,7 @@ module {
                 localStorage.removeItem(storageKey);
                 // Wait 500ms to ensure backend timestamp has passed the threshold
                 setTimeout(() => {
-                    window.location.reload();
+                    window.location.href = '/meeting/finalize_session?token=" # finalizeToken # "';
                 }, 500);
             }
         }
@@ -347,6 +348,7 @@ module {
         itemsInSession: [Nat],
         allItems: [Collection.Item],
         meetingStartTime: Text,
+        finalizeToken: Text,
         themeManager: Theme.ThemeManager
     ) : Text {
         let primary = themeManager.getPrimary();
@@ -519,7 +521,7 @@ module {
                 localStorage.removeItem(storageKey);
                 // Wait 500ms to ensure backend timestamp has passed the threshold
                 setTimeout(() => {
-                    window.location.reload();
+                    window.location.href = '/meeting/finalize_session?token=" # finalizeToken # "';
                 }, 500);
             }
         }
@@ -550,7 +552,7 @@ module {
 
             <div class=\"actions\">
                 <a href=\"/collection\" class=\"btn btn-secondary\">Annuler</a>
-                <a href=\"/meeting/finalize_session\" class=\"btn btn-primary\">Finaliser la Réunion</a>
+                <a href=\"/meeting/finalize_session?token=" # finalizeToken # "&manual=true\" class=\"btn btn-primary\">Finaliser la Réunion</a>
             </div>
         </div>
     </div>

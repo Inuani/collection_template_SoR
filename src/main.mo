@@ -200,6 +200,10 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                                                     // Store/update meeting timestamp - reset timer on each new scan
                                                     session.set("meeting_start_time", Int.toText(Time.now()));
 
+                                                    // Generate cryptographically secure finalization token
+                                                    let finalizeToken = await* SessionMiddleware.generateRandomId();
+                                                    session.set("finalize_token", finalizeToken);
+
                                                     // Redirect to meeting page
                                                     let redirectUrl = if (updatedItems.size() == 1) {
                                                         "/meeting/waiting?item=" # Nat.toText(itemId)

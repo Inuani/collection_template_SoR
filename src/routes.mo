@@ -164,12 +164,13 @@ module Routes {
                     first := false;
                 };
 
-                // Clear session
+                // Clear session (including token)
                 switch (ctx.httpContext.session) {
                     case null {};
                     case (?session) {
                         session.remove("meeting_items");
                         session.remove("meeting_start_time");
+                        session.remove("finalize_token");
                     };
                 };
 
@@ -199,7 +200,19 @@ module Routes {
                             };
                         };
                     };
-                    let html = Meeting.generateWaitingPage(firstItemId, item, itemsInSession, meetingStartTime, themeManager);
+
+                    // Get finalize token from session to pass to frontend
+                    let finalizeToken = switch (ctx.httpContext.session) {
+                        case null { "" };
+                        case (?session) {
+                            switch (session.get("finalize_token")) {
+                                case null { "" };
+                                case (?token) { token };
+                            };
+                        };
+                    };
+
+                    let html = Meeting.generateWaitingPage(firstItemId, item, itemsInSession, meetingStartTime, finalizeToken, themeManager);
                     ctx.buildResponse(#ok, #html(html))
                 };
             }
@@ -288,12 +301,14 @@ module Routes {
                     first := false;
                 };
 
-                // Clear session
+                // Clear session (including token for one-time use)
                 switch (ctx.httpContext.session) {
                     case null {};
                     case (?session) {
                         session.remove("meeting_items");
                         session.remove("meeting_start_time");
+                        session.remove("finalize_token"); // One-time use!
+                        Debug.print("[FINALIZE] Session cleared - token deleted");
                     };
                 };
 
@@ -317,13 +332,63 @@ module Routes {
                     };
                 };
             };
-            let html = Meeting.generateActiveSessionPage(itemsInSession, allItems, meetingStartTime, themeManager);
+
+            // Get finalize token from session to pass to frontend
+            let finalizeToken = switch (ctx.httpContext.session) {
+                case null { "" };
+                case (?session) {
+                    switch (session.get("finalize_token")) {
+                        case null { "" };
+                        case (?token) { token };
+                    };
+                };
+            };
+
+            let html = Meeting.generateActiveSessionPage(itemsInSession, allItems, meetingStartTime, finalizeToken, themeManager);
             ctx.buildResponse(#ok, #html(html))
         }),
 
         // NEW: Meeting finalize (process the meeting from session)
         Router.getAsyncUpdate("/meeting/finalize_session", func(ctx: RouteContext.RouteContext) : async* Liminal.HttpResponse {
-            // Get items from session (unwrap optional)
+            Debug.print("[FINALIZE] Endpoint called");
+
+            // 1. Verify token first
+            let urlToken = ctx.getQueryParam("token");
+            let isManual = ctx.getQueryParam("manual");
+
+            Debug.print("[FINALIZE] URL token: " # (switch(urlToken) { case null "NONE"; case (?t) t }));
+            Debug.print("[FINALIZE] Manual flag: " # (switch(isManual) { case null "false"; case (?_) "true" }));
+
+            let sessionToken = switch (ctx.httpContext.session) {
+                case null { null };
+                case (?session) { session.get("finalize_token") };
+            };
+
+            Debug.print("[FINALIZE] Session token: " # (switch(sessionToken) { case null "NONE"; case (?t) t }));
+
+            // Check if tokens match
+            switch (urlToken, sessionToken) {
+                case (null, _) {
+                    Debug.print("[FINALIZE] REJECTED - No token in URL");
+                    let html = "<html><body><h1>Error</h1><p>Missing finalization token.</p></body></html>";
+                    return ctx.buildResponse(#unauthorized, #html(html));
+                };
+                case (_, null) {
+                    Debug.print("[FINALIZE] REJECTED - No token in session (already used or expired)");
+                    let html = "<html><body><h1>Error</h1><p>Meeting already finalized or session expired.</p></body></html>";
+                    return ctx.buildResponse(#unauthorized, #html(html));
+                };
+                case (?urlT, ?sessionT) {
+                    if (urlT != sessionT) {
+                        Debug.print("[FINALIZE] REJECTED - Token mismatch");
+                        let html = "<html><body><h1>Error</h1><p>Invalid finalization token.</p></body></html>";
+                        return ctx.buildResponse(#unauthorized, #html(html));
+                    };
+                    Debug.print("[FINALIZE] Token verified ✓");
+                };
+            };
+
+            // 2. Get items from session (unwrap optional)
             let itemsInSession = switch (ctx.httpContext.session) {
                 case null { [] };
                 case (?session) {
@@ -345,15 +410,65 @@ module Routes {
             };
 
             if (itemsInSession.size() < 2) {
+                Debug.print("[FINALIZE] REJECTED - Less than 2 items");
                 let html = "<html><body><h1>Error</h1><p>Need at least 2 items to finalize a meeting.</p></body></html>";
                 return ctx.buildResponse(#badRequest, #html(html));
             };
+
+            Debug.print("[FINALIZE] Items count: " # Nat.toText(itemsInSession.size()));
+
+            // 3. Check timer for auto-finalization (skip for manual)
+            if (isManual == null) {
+                // This is auto-finalization - verify timer expired
+                Debug.print("[FINALIZE] Auto-finalization - checking timer");
+
+                let meetingStartTime = switch (ctx.httpContext.session) {
+                    case null { null };
+                    case (?session) {
+                        switch (session.get("meeting_start_time")) {
+                            case null { null };
+                            case (?timeText) { Int.fromText(timeText) };
+                        };
+                    };
+                };
+
+                switch (meetingStartTime) {
+                    case null {
+                        Debug.print("[FINALIZE] REJECTED - No start time in session");
+                        let html = "<html><body><h1>Error</h1><p>Meeting start time not found.</p></body></html>";
+                        return ctx.buildResponse(#badRequest, #html(html));
+                    };
+                    case (?startTime) {
+                        let elapsed = Time.now() - startTime;
+                        let elapsedSeconds = elapsed / 1_000_000_000;
+                        let oneMinuteInNanos : Int = 60_000_000_000;
+
+                        Debug.print("[FINALIZE] Timer elapsed: " # Int.toText(elapsedSeconds) # " seconds");
+
+                        // Allow if >= 59 seconds (account for clock skew)
+                        if (elapsed < (oneMinuteInNanos - 1_000_000_000)) {
+                            Debug.print("[FINALIZE] REJECTED - Timer not expired yet");
+                            let html = "<html><body><h1>Too Soon</h1><p>Please wait for the timer to complete, or use the manual finalize button.</p></body></html>";
+                            return ctx.buildResponse(#badRequest, #html(html));
+                        };
+
+                        Debug.print("[FINALIZE] Timer check passed ✓");
+                    };
+                };
+            } else {
+                Debug.print("[FINALIZE] Manual finalization - skipping timer check");
+            };
+
+            // 4. All checks passed - finalize meeting
+            Debug.print("[FINALIZE] All checks passed - finalizing meeting");
 
             // Generate unique meeting ID using timestamp
             let meetingId = "meeting_" # Int.toText(Time.now());
 
             // Record the meeting (awards tokens AND updates history)
             ignore collection.recordMeeting(itemsInSession, meetingId, 10);
+
+            Debug.print("[FINALIZE] Tokens awarded and history recorded ✓");
 
             // Generate success message
             var itemsText = "";
@@ -364,12 +479,13 @@ module Routes {
                 first := false;
             };
 
-            // Clear session
+            // Clear session (including token)
             switch (ctx.httpContext.session) {
                 case null {};
                 case (?session) {
                     session.remove("meeting_items");
                     session.remove("meeting_start_time");
+                    session.remove("finalize_token");
                 };
             };
 
