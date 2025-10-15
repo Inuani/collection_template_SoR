@@ -17,7 +17,7 @@ import Theme "utils/theme";
 import Buttons "utils/buttons";
 import FileService "services/file_service";
 import CollectionService "services/collection_service";
-import MeetingService "services/meeting_service";
+import StitchingService "services/stitching_service";
 import AssetService "services/asset_service";
 
 shared ({ caller = initializer }) persistent actor class Actor() = self {
@@ -45,7 +45,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     transient let fileService = FileService.make(file_storage);
     transient let collectionService = CollectionService.make(initializer, collection);
-    transient let meetingService = MeetingService.make(collection);
+    transient let stitchingService = StitchingService.make(collection);
 
     transient let setPermissions : HttpAssets.SetPermissions = {
         commit = [initializer];
@@ -63,11 +63,11 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
 
 
-    // Configure session middleware for meeting system
+    // Configure session middleware for stitching system
     transient let sessionStore = SessionMiddleware.buildInMemoryStore();
     transient let sessionConfig : SessionMiddleware.Config = {
-        cookieName = "meeting_session";
-        idleTimeout = 3 * 60; // 3 minutes in seconds (longer than meeting duration)
+        cookieName = "stitching_session";
+        idleTimeout = 3 * 60; // 3 minutes in seconds (longer than stitching duration)
         cookieOptions = {
             path = "/";
             secure = false; // Set to true in production with HTTPS
@@ -207,27 +207,27 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     };
 
     // ============================================
-    // PROOF-OF-MEETING API FUNCTIONS
+    // PROOF-OF-STITCHING API FUNCTIONS
     // ============================================
 
     // Add tokens to an item
     public shared func addTokens(itemId: Nat, amount: Nat) : async Result.Result<(), Text> {
-        meetingService.addTokens(itemId, amount)
+        stitchingService.addTokens(itemId, amount)
     };
 
-    // Record a meeting for multiple items
-    public shared func recordMeeting(itemIds: [Nat], meetingId: Text, tokensEarned: Nat) : async Result.Result<(), Text> {
-        meetingService.recordMeeting(itemIds, meetingId, tokensEarned)
+    // Record a stitching for multiple items
+    public shared func recordStitching(itemIds: [Nat], stitchingId: Text, tokensEarned: Nat) : async Result.Result<(), Text> {
+        stitchingService.recordStitching(itemIds, stitchingId, tokensEarned)
     };
 
     // Get item's token balance
     public query func getItemBalance(itemId: Nat) : async Result.Result<Nat, Text> {
-        meetingService.getItemBalance(itemId)
+        stitchingService.getItemBalance(itemId)
     };
 
-    // Get item's meeting history
-    public query func getItemMeetingHistory(itemId: Nat) : async Result.Result<[Collection.MeetingRecord], Text> {
-        meetingService.getItemMeetingHistory(itemId)
+    // Get item's stitching history
+    public query func getItemStitchingHistory(itemId: Nat) : async Result.Result<[Collection.StitchingRecord], Text> {
+        stitchingService.getItemStitchingHistory(itemId)
     };
 
     assetStore.set_streaming_callback(http_request_streaming_callback);

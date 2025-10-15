@@ -13,7 +13,7 @@ import Home "home";
 import Theme "utils/theme";
 import Files "files";
 import Buttons "utils/buttons";
-import MeetingRoutes "meeting_routes";
+import StitchingRoutes "stitching_routes";
 
 module Routes {
    public func routerConfig(
@@ -75,8 +75,8 @@ module Routes {
 
         ],
 
-        // Meeting routes (extracted to separate module)
-        MeetingRoutes.getMeetingRoutes(collection, themeManager),
+        // Stitching routes (extracted to separate module)
+        StitchingRoutes.getStitchingRoutes(collection, themeManager),
 
         [
 

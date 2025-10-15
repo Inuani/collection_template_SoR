@@ -8,11 +8,11 @@ import Time "mo:core/Time";
 import Int "mo:core/Int";
 
 module {
-    // Meeting Record Type
-    public type MeetingRecord = {
-        meeting_id: Text;
+    // Stitching Record Type
+    public type StitchingRecord = {
+        stitching_id: Text;
         date: Int; // timestamp
-        partner_item_ids: [Nat]; // other items in the meeting
+        partner_item_ids: [Nat]; // other items in the stitching
         tokens_earned: Nat;
     };
 
@@ -25,8 +25,8 @@ module {
         description: Text;
         rarity: Text;
         attributes: [(Text, Text)]; // key-value pairs for additional attributes
-        token_balance: Nat; // tokens earned from meetings
-        meeting_history: [MeetingRecord]; // array of past meetings
+        token_balance: Nat; // tokens earned from stitchings
+        stitching_history: [StitchingRecord]; // array of past stitchings
     };
 
     // State for persistence across upgrades
@@ -87,7 +87,7 @@ module {
                 rarity;
                 attributes;
                 token_balance = 0;
-                meeting_history = [];
+                stitching_history = [];
             };
 
             Map.add(items, Nat.compare, id, newItem);
@@ -120,7 +120,7 @@ module {
                         rarity;
                         attributes;
                         token_balance = existingItem.token_balance; // Preserve existing balance
-                        meeting_history = existingItem.meeting_history; // Preserve history
+                        stitching_history = existingItem.stitching_history; // Preserve history
                     };
                     Map.add(items, Nat.compare, id, updatedItem);
                     updateState();
@@ -188,7 +188,7 @@ module {
                         rarity = item.rarity;
                         attributes = item.attributes;
                         token_balance = item.token_balance + amount;
-                        meeting_history = item.meeting_history;
+                        stitching_history = item.stitching_history;
                     };
                     Map.add(items, Nat.compare, itemId, updatedItem);
                     updateState();
@@ -197,11 +197,11 @@ module {
             };
         };
 
-        // Record a meeting for multiple items
-        public func recordMeeting(itemIds: [Nat], meetingId: Text, tokensEarned: Nat) : Result.Result<(), Text> {
+        // Record a stitching for multiple items
+        public func recordStitching(itemIds: [Nat], stitchingId: Text, tokensEarned: Nat) : Result.Result<(), Text> {
             let timestamp = Time.now();
 
-            // Update each item with the meeting record
+            // Update each item with the stitching record
             for (itemId in itemIds.vals()) {
                 switch (Map.get(items, Nat.compare, itemId)) {
                     case null {
@@ -211,16 +211,16 @@ module {
                         // Get other participants (exclude current item)
                         let partnerIds = Array.filter<Nat>(itemIds, func(id) = id != itemId);
 
-                        // Create meeting record
-                        let meetingRecord : MeetingRecord = {
-                            meeting_id = meetingId;
+                        // Create stitching record
+                        let stitchingRecord : StitchingRecord = {
+                            stitching_id = stitchingId;
                             date = timestamp;
                             partner_item_ids = partnerIds;
                             tokens_earned = tokensEarned;
                         };
 
                         // Add to history
-                        let updatedHistory = Array.concat(item.meeting_history, [meetingRecord]);
+                        let updatedHistory = Array.concat(item.stitching_history, [stitchingRecord]);
 
                         // Update item with new history and tokens
                         let updatedItem : Item = {
@@ -232,7 +232,7 @@ module {
                             rarity = item.rarity;
                             attributes = item.attributes;
                             token_balance = item.token_balance + tokensEarned;
-                            meeting_history = updatedHistory;
+                            stitching_history = updatedHistory;
                         };
 
                         Map.add(items, Nat.compare, itemId, updatedItem);
@@ -256,19 +256,19 @@ module {
             };
         };
 
-        // Get item's meeting history
-        public func getItemMeetingHistory(itemId: Nat) : Result.Result<[MeetingRecord], Text> {
+        // Get item's stitching history
+        public func getItemStitchingHistory(itemId: Nat) : Result.Result<[StitchingRecord], Text> {
             switch (Map.get(items, Nat.compare, itemId)) {
                 case null {
                     #err("Item with ID " # Nat.toText(itemId) # " not found")
                 };
                 case (?item) {
-                    #ok(item.meeting_history)
+                    #ok(item.stitching_history)
                 };
             };
         };
 
-        // Admin function: List all active meetings (for debugging)
+        // Admin function: List all active stitchings (for debugging)
 
 
         // ============================================

@@ -6,11 +6,11 @@ import Array "mo:core/Array";
 import Session "mo:liminal/Session";
 
 module {
-    public let meetingTimeoutNanos : Int = 60_000_000_000;
+    public let stitchingTimeoutNanos : Int = 60_000_000_000;
 
-    private let itemsKey : Text = "meeting_items";
-    private let startTimeKey : Text = "meeting_start_time";
-    private let finalizeTokenKey : Text = "finalize_token";
+    private let itemsKey : Text = "stitching_items";
+    private let startTimeKey : Text = "stitching_start_time";
+    private let finalizeTokenKey : Text = "stitching_finalize_token";
 
     public func getItems(sessionOpt : ?Session.Session) : [Nat] {
         switch (sessionOpt) {

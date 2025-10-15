@@ -177,7 +177,7 @@ module NFCMiddleware {
         themeManager: Theme.ThemeManager
     ) : App.Middleware {
         {
-            name = "NFC Protection with Session-Based Meetings";
+            name = "NFC Protection with Session-Based Stitchings";
             handleQuery = func(context : HttpContext.HttpContext, next : App.Next) : App.QueryResult {
                 if (protected_routes_storage.isProtectedRoute(context.request.url)) {
                     return #upgrade; // Force verification in update call
@@ -229,9 +229,9 @@ module NFCMiddleware {
                                             };
                                         };
                                         case (?session) {
-                                            // Check if session has active meeting
-                                            let itemsInSession = switch (session.get("meeting_items")) {
-                                                case null { [] }; // No meeting yet
+                                            // Check if session has active stitching
+                                            let itemsInSession = switch (session.get("stitching_items")) {
+                                                case null { [] }; // No stitching yet
                                                 case (?itemsText) {
                                                     // Parse existing items
                                                     let parts = Iter.toArray(Text.split(itemsText, #char ','));
@@ -252,7 +252,7 @@ module NFCMiddleware {
                                             switch (alreadyScanned) {
                                                 case (?_) {
                                                     // Already scanned - show error
-                                                    let html = "<html><body><h1>Already Scanned</h1><p>This item is already in the meeting.</p></body></html>";
+                                                    let html = "<html><body><h1>Already Scanned</h1><p>This item is already in the stitching.</p></body></html>";
                                                     return {
                                                         statusCode = 200;
                                                         headers = [("Content-Type", "text/html")];
@@ -270,20 +270,20 @@ module NFCMiddleware {
                                                         itemsText #= Nat.toText(id);
                                                         first := false;
                                                     };
-                                                    session.set("meeting_items", itemsText);
+                                                    session.set("stitching_items", itemsText);
 
-                                                    // Store/update meeting timestamp - reset timer on each new scan
-                                                    session.set("meeting_start_time", Int.toText(Time.now()));
+                                                    // Store/update stitching timestamp - reset timer on each new scan
+                                                    session.set("stitching_start_time", Int.toText(Time.now()));
 
                                                     // Generate cryptographically secure finalization token
                                                     let finalizeToken = await* SessionMiddleware.generateRandomId();
-                                                    session.set("finalize_token", finalizeToken);
+                                                    session.set("stitching_finalize_token", finalizeToken);
 
-                                                    // Redirect to meeting page
+                                                    // Redirect to stitching page
                                                     let redirectUrl = if (updatedItems.size() == 1) {
-                                                        "/meeting/waiting?item=" # Nat.toText(itemId)
+                                                        "/stitching/waiting?item=" # Nat.toText(itemId)
                                                     } else {
-                                                        "/meeting/active?items=" # itemsText
+                                                        "/stitching/active?items=" # itemsText
                                                     };
 
                                                     let html = "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0;url=" # redirectUrl # "'></head><body> Scanned! Redirecting...</body></html>";

@@ -6,8 +6,8 @@ import Theme "utils/theme";
 
 module {
 
-    // Generate error page for meeting issues
-    public func generateMeetingErrorPage(
+    // Generate error page for stitching issues
+    public func generateStitchingErrorPage(
         errorMessage: Text,
         themeManager: Theme.ThemeManager
     ) : Text {
@@ -18,7 +18,7 @@ module {
 <head>
     <meta charset=\"UTF-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-    <title>Erreur de Réunion</title>
+    <title>Erreur de Stitching</title>
     <style>
         * {
             margin: 0;
@@ -89,7 +89,7 @@ module {
     <div class=\"container\">
         <div class=\"error-card\">
             <div class=\"icon\">⚠️</div>
-            <h1>Erreur de Réunion</h1>
+            <h1>Erreur de Stitching</h1>
 
             <div class=\"error-message\">
                 " # errorMessage # "
@@ -106,7 +106,7 @@ module {
     public func generateWaitingPage(
         item: Collection.Item,
         itemsInSession: [Nat],
-        meetingStartTime: Text,
+        stitchingStartTime: Text,
         finalizeToken: Text,
         themeManager: Theme.ThemeManager
     ) : Text {
@@ -117,7 +117,7 @@ module {
 <head>
     <meta charset=\"UTF-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-    <title>Réunion Démarrée - En Attente</title>
+    <title>Stitching Démarrée - En Attente</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -206,10 +206,10 @@ module {
     </style>
     <script>
         const MEETING_DURATION = 60; // 1 minute in seconds
-        const storageKey = 'meeting_session_active';
+        const storageKey = 'stitching_session_active';
 
         // Get server timestamp (in nanoseconds) and convert to milliseconds
-        const serverStartTimeNanos = " # meetingStartTime # ";
+        const serverStartTimeNanos = " # stitchingStartTime # ";
         const serverStartTimeMs = Math.floor(serverStartTimeNanos / 1000000);
 
         console.log('[Waiting Page] Server timestamp (ms):', serverStartTimeMs);
@@ -234,12 +234,12 @@ module {
             countdownEl.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
 
             if (remainingSeconds === 0) {
-                console.log('[Waiting Page] Timer expired - auto-finalizing meeting');
+                console.log('[Waiting Page] Timer expired - auto-finalizing stitching');
                 countdownEl.textContent = 'Finalizing...';
                 localStorage.removeItem(storageKey);
                 // Wait 500ms to ensure backend timestamp has passed the threshold
                 setTimeout(() => {
-                    window.location.href = '/meeting/finalize_session?token=" # finalizeToken # "';
+                    window.location.href = '/stitching/finalize_session?token=" # finalizeToken # "';
                 }, 500);
             }
         }
@@ -254,7 +254,7 @@ module {
     <div class=\"container\">
         <div class=\"card\">
             <div class=\"icon\">✅</div>
-            <h1>Réunion Démarrée !</h1>
+            <h1>Stitching Démarrée !</h1>
             <div class=\"item-name\">" # item.name # "</div>
 
             <div class=\"spinner\"></div>
@@ -280,7 +280,7 @@ module {
     public func generateActiveSessionPage(
         itemsInSession: [Nat],
         allItems: [Collection.Item],
-        meetingStartTime: Text,
+        stitchingStartTime: Text,
         finalizeToken: Text,
         themeManager: Theme.ThemeManager
     ) : Text {
@@ -309,7 +309,7 @@ module {
 <head>
     <meta charset=\"UTF-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-    <title>Réunion Active</title>
+    <title>Stitching Active</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -420,10 +420,10 @@ module {
     </style>
     <script>
         const MEETING_DURATION = 60;
-        const storageKey = 'meeting_session_active';
+        const storageKey = 'stitching_session_active';
 
         // Get server timestamp (in nanoseconds) and convert to milliseconds
-        const serverStartTimeNanos = " # meetingStartTime # ";
+        const serverStartTimeNanos = " # stitchingStartTime # ";
         const serverStartTimeMs = Math.floor(serverStartTimeNanos / 1000000);
 
         console.log('[Active Page] Server timestamp (ms):', serverStartTimeMs);
@@ -448,12 +448,12 @@ module {
             countdownEl.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
 
             if (remainingSeconds === 0) {
-                console.log('[Active Page] Timer expired - auto-finalizing meeting');
+                console.log('[Active Page] Timer expired - auto-finalizing stitching');
                 countdownEl.textContent = 'Finalizing...';
                 localStorage.removeItem(storageKey);
                 // Wait 500ms to ensure backend timestamp has passed the threshold
                 setTimeout(() => {
-                    window.location.href = '/meeting/finalize_session?token=" # finalizeToken # "';
+                    window.location.href = '/stitching/finalize_session?token=" # finalizeToken # "';
                 }, 500);
             }
         }
@@ -466,7 +466,7 @@ module {
     <div class=\"container\">
         <div class=\"card\">
             <div class=\"icon\">🎉</div>
-            <h1>Réunion Active</h1>
+            <h1>Stitching Active</h1>
 
             <div class=\"countdown\" id=\"countdown\">1:00</div>
             <div class=\"countdown-label\">Temps restant pour rejoindre</div>
@@ -478,13 +478,13 @@ module {
 
             <div class=\"instructions\">
                 <h3>🎉 Prêt à Finaliser !</h3>
-                <p>Vous avez assez de participants ! Cliquez sur \"Finaliser la Réunion\" pour distribuer 10 jetons à chaque objet.</p>
+                <p>Vous avez assez de participants ! Cliquez sur \"Finaliser la Stitching\" pour distribuer 10 jetons à chaque objet.</p>
                 <p style=\"margin-top: 0.5rem;\">Ou scannez plus de tags NFC pour ajouter plus de participants à cette réunion.</p>
             </div>
 
             <div class=\"actions\">
                 <a href=\"/collection\" class=\"btn btn-secondary\">Annuler</a>
-                <a href=\"/meeting/finalize_session?token=" # finalizeToken # "&manual=true\" class=\"btn btn-primary\">Finaliser la Réunion</a>
+                <a href=\"/stitching/finalize_session?token=" # finalizeToken # "&manual=true\" class=\"btn btn-primary\">Finaliser la Stitching</a>
             </div>
         </div>
     </div>
@@ -524,7 +524,7 @@ module {
 <head>
     <meta charset=\"UTF-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-    <title>Réunion Réussie !</title>
+    <title>Stitching Réussie !</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -631,15 +631,15 @@ module {
         .btn-secondary:hover { background: #e5e7eb; }
     </style>
     <script>
-        // Clear the meeting session storage on success page
-        localStorage.removeItem('meeting_session_active');
+        // Clear the stitching session storage on success page
+        localStorage.removeItem('stitching_session_active');
     </script>
 </head>
 <body>
     <div class=\"container\">
         <div class=\"card\">
             <div class=\"icon\">🎉</div>
-            <h1>Réunion Terminée !</h1>
+            <h1>Stitching Terminée !</h1>
             <p class=\"subtitle\">Jetons distribués à tous les participants</p>
 
             <div class=\"reward-badge\">+10 Jetons Chacun</div>

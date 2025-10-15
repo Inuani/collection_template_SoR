@@ -107,7 +107,7 @@ module {
         themeManager: Theme.ThemeManager
     ) : Text {
         let attributesHtml = generateAttributesHtml(item.attributes);
-        let meetingHistoryHtml = generateMeetingHistoryHtml(item.meeting_history);
+        let stitchingHistoryHtml = generateStitchingHistoryHtml(item.stitching_history);
         let rarityClass = "rarity-" # Text.toLower(item.rarity);
         let primary = themeManager.getPrimary();
         let secondary = themeManager.getSecondary();
@@ -144,11 +144,11 @@ module {
         # "        .stat-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }\n"
         # "        .history { background: #f8fafc; border-radius: 12px; padding: 1.5rem; border: 1px solid #e2e8f0; }\n"
         # "        .history-title { font-size: 1.3rem; font-weight: 600; color: #2d3748; margin-bottom: 1rem; }\n"
-        # "        .meeting-record { padding: 1rem; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 1rem; background: white; }\n"
-        # "        .meeting-record:last-child { margin-bottom: 0; }\n"
-        # "        .meeting-date { font-weight: 600; color: #1f2937; margin-bottom: 0.5rem; }\n"
-        # "        .meeting-partners { color: #4b5563; margin-bottom: 0.5rem; }\n"
-        # "        .meeting-tokens { color: " # primary # "; font-weight: 600; }\n"
+        # "        .stitching-record { padding: 1rem; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 1rem; background: white; }\n"
+        # "        .stitching-record:last-child { margin-bottom: 0; }\n"
+        # "        .stitching-date { font-weight: 600; color: #1f2937; margin-bottom: 0.5rem; }\n"
+        # "        .stitching-partners { color: #4b5563; margin-bottom: 0.5rem; }\n"
+        # "        .stitching-tokens { color: " # primary # "; font-weight: 600; }\n"
         # "        .empty-history { text-align: center; color: #6b7280; padding: 1rem 0; }\n"
         # "    </style>\n"
         # "</head>\n"
@@ -168,8 +168,8 @@ module {
         # "                <strong>" # Nat.toText(item.token_balance) # "</strong>\n"
         # "            </div>\n"
         # "            <div class=\"stat-card\">\n"
-        # "                <span>Total meetings</span>\n"
-        # "                <strong>" # Nat.toText(item.meeting_history.size()) # "</strong>\n"
+        # "                <span>Total stitchings</span>\n"
+        # "                <strong>" # Nat.toText(item.stitching_history.size()) # "</strong>\n"
         # "            </div>\n"
         # "        </div>\n"
         # "        <div class=\"attributes\">\n"
@@ -177,26 +177,26 @@ module {
         # "            " # attributesHtml # "\n"
         # "        </div>\n"
         # "        <div class=\"history\">\n"
-        # "            <h2 class=\"history-title\">Meeting history</h2>\n"
-        # "            " # meetingHistoryHtml # "\n"
+        # "            <h2 class=\"history-title\">Stitching history</h2>\n"
+        # "            " # stitchingHistoryHtml # "\n"
         # "        </div>\n"
         # "    </div>\n"
         # "</body>\n"
         # "</html>"
     };
 
-    private func generateMeetingHistoryHtml(history: [Collection.MeetingRecord]) : Text {
+    private func generateStitchingHistoryHtml(history: [Collection.StitchingRecord]) : Text {
         if (history.size() == 0) {
-            return "<div class=\"empty-history\">No meetings recorded yet.</div>";
+            return "<div class=\"empty-history\">No stitchings recorded yet.</div>";
         };
 
         var html = "";
         for (record in history.vals()) {
             let partners = formatPartners(record.partner_item_ids);
-            html #= "<div class=\"meeting-record\">\n"
-                # "    <div class=\"meeting-date\">Meeting ID: " # record.meeting_id # "</div>\n"
-                # "    <div class=\"meeting-partners\">" # partners # "</div>\n"
-                # "    <div class=\"meeting-tokens\">+" # Nat.toText(record.tokens_earned) # " tokens</div>\n"
+            html #= "<div class=\"stitching-record\">\n"
+                # "    <div class=\"stitching-date\">Stitching ID: " # record.stitching_id # "</div>\n"
+                # "    <div class=\"stitching-partners\">" # partners # "</div>\n"
+                # "    <div class=\"stitching-tokens\">+" # Nat.toText(record.tokens_earned) # " tokens</div>\n"
                 # "</div>";
         };
         html
@@ -204,10 +204,10 @@ module {
 
     private func formatPartners(partnerIds: [Nat]) : Text {
         if (partnerIds.size() == 0) {
-            return "Solo meeting";
+            return "Solo stitching";
         };
 
-        var parts = "Met with items: ";
+        var parts = "Stitched with items: ";
         var index = 0;
         let last = partnerIds.size();
         while (index < last) {
