@@ -5,7 +5,7 @@ import Iter "mo:core/Iter";
 import Char "mo:core/Char";
 import Nat8 "mo:core/Nat8";
 import Nat32 "mo:core/Nat32";
-import Sha "utils/sha";
+import Sha "sha";
 
 module {
     public func hexToNat(hexString: Text) : Nat {
