@@ -9,8 +9,8 @@ import HttpContext "mo:liminal/HttpContext";
 import SessionMiddleware "mo:liminal/Middleware/Session";
 import ProtectedRoutes "../nfc_protec_routes";
 import Scan "../scan";
-import InvalidScan "../invalid_scan";
-import Theme "../theme";
+import InvalidScan "../utils/invalid_scan";
+import Theme "../utils/theme";
 
 module NFCMiddleware {
 

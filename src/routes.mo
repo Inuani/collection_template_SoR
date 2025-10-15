@@ -9,9 +9,9 @@ import Array "mo:core/Array";
 // import Route "mo:liminal/Route";
 import Collection "collection";
 import Home "home";
-import Theme "theme";
+import Theme "utils/theme";
 import Files "files";
-import Buttons "buttons";
+import Buttons "utils/buttons";
 import MeetingRoutes "meeting_routes";
 
 module Routes {

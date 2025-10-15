@@ -1,8 +1,8 @@
 import Liminal "mo:liminal";
 import RouteContext "mo:liminal/RouteContext";
 import Text "mo:core/Text";
-import Theme "theme";
-import Buttons "buttons";
+import Theme "utils/theme";
+import Buttons "utils/buttons";
 
 module {
     public func homePage(

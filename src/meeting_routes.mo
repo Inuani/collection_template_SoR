@@ -9,7 +9,7 @@ import Iter "mo:core/Iter";
 import Array "mo:core/Array";
 import Debug "mo:core/Debug";
 import Collection "collection";
-import Theme "theme";
+import Theme "utils/theme";
 import Meeting "meeting";
 
 module MeetingRoutes {

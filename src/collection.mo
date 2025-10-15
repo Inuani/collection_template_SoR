@@ -4,7 +4,7 @@ import Map "mo:core/Map";
 import Iter "mo:core/Iter";
 import Array "mo:core/Array";
 import Result "mo:core/Result";
-import Theme "theme";
+import Theme "utils/theme";
 import Time "mo:core/Time";
 import Int "mo:core/Int";
 

@@ -13,8 +13,8 @@ import Files "files";
 import Collection "collection";
 import Result "mo:core/Result";
 import RouterMiddleware "mo:liminal/Middleware/Router";
-import Theme "theme";
-import Buttons "buttons";
+import Theme "utils/theme";
+import Buttons "utils/buttons";
 
 shared ({ caller = initializer }) persistent actor class Actor() = self {
 
