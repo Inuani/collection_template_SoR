@@ -103,73 +103,8 @@ module {
 </html>"
     };
 
-    // Helper: Generate list of scanned items
-    private func generateScannedItemsList(scannedItemIds: [Nat], allItems: [Collection.Item]) : Text {
-        var html = "";
-
-        for (itemId in scannedItemIds.vals()) {
-            // Find the item
-            let itemOpt = Array.find<Collection.Item>(allItems, func(item) { item.id == itemId });
-
-            switch (itemOpt) {
-                case (?item) {
-                    let isCurrent = itemId == scannedItemIds[0];
-                    html #= "<li class=\"item-entry" # (if (isCurrent) { " current" } else { "" }) # "\">
-                        <img src=\"" # item.thumbnailUrl # "\" alt=\"" # item.name # "\" class=\"item-icon\">
-                        <div class=\"item-info\">
-                            <div class=\"item-name\">" # item.name # (if (isCurrent) { " (Vous)" } else { "" }) # "</div>
-                            <div class=\"item-id\">Objet #" # Nat.toText(item.id) # "</div>
-                        </div>
-                    </li>";
-                };
-                case null {
-                    html #= "<li class=\"item-entry\">
-                        <div class=\"item-info\">
-                            <div class=\"item-name\">Objet #" # Nat.toText(itemId) # "</div>
-                            <div class=\"item-id\">Détails non disponibles</div>
-                        </div>
-                    </li>";
-                };
-            };
-        };
-
-        html
-    };
-
-    // Helper: Generate list of rewarded items
-    private func generateRewardedItemsList(itemIds: [Nat], allItems: [Collection.Item]) : Text {
-        var html = "";
-
-        for (itemId in itemIds.vals()) {
-            let itemOpt = Array.find<Collection.Item>(allItems, func(item) { item.id == itemId });
-
-            switch (itemOpt) {
-                case (?item) {
-                    html #= "<div class=\"item-entry\">
-                        <img src=\"" # item.thumbnailUrl # "\" alt=\"" # item.name # "\" class=\"item-icon\">
-                        <div class=\"item-info\">
-                            <div class=\"item-name\">" # item.name # "</div>
-                            <div class=\"item-tokens\">+10 jetons</div>
-                        </div>
-                    </div>";
-                };
-                case null {
-                    html #= "<div class=\"item-entry\">
-                        <div class=\"item-info\">
-                            <div class=\"item-name\">Objet #" # Nat.toText(itemId) # "</div>
-                            <div class=\"item-tokens\">+10 jetons</div>
-                        </div>
-                    </div>";
-                };
-            };
-        };
-
-        html
-    };
-
     // NEW: Generate waiting page for first scan (session-based)
     public func generateWaitingPage(
-        itemId: Nat,
         item: Collection.Item,
         itemsInSession: [Nat],
         meetingStartTime: Text,
@@ -177,7 +112,6 @@ module {
         themeManager: Theme.ThemeManager
     ) : Text {
         let primary = themeManager.getPrimary();
-        let secondary = themeManager.getSecondary();
 
         "<!DOCTYPE html>
 <html lang=\"fr\">
@@ -352,7 +286,6 @@ module {
         themeManager: Theme.ThemeManager
     ) : Text {
         let primary = themeManager.getPrimary();
-        let secondary = themeManager.getSecondary();
 
         // Generate list of scanned items
         var itemsHtml = "";

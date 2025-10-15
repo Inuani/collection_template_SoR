@@ -65,7 +65,7 @@ module Routes {
                }),
 
         // Example: Alternative route pattern /nft/{id} (works the same as /item/{id})
-        Router.getQuery("/nft/{id}", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
+        Router.getQuery("/stitch/{id}", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
                    let idText = ctx.getRouteParam("id");
 
                    let id = switch (Nat.fromText(idText)) {
@@ -212,7 +212,7 @@ module Routes {
                         };
                     };
 
-                    let html = Meeting.generateWaitingPage(firstItemId, item, itemsInSession, meetingStartTime, finalizeToken, themeManager);
+                    let html = Meeting.generateWaitingPage(item, itemsInSession, meetingStartTime, finalizeToken, themeManager);
                     ctx.buildResponse(#ok, #html(html))
                 };
             }

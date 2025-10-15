@@ -71,7 +71,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                     case (#complete(response)) {
                         return #response(response);
                     };
-                    case (#next({ corsHeaders })) {
+                    case (#next({ corsHeaders = _ })) {
                         // Continue to next middleware
                         next();
                     };

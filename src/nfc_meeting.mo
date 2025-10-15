@@ -33,9 +33,9 @@ module {
         {uid = uid; cmac = cmac; ctr = ctr}
     };
 
-    // Extract item ID from URL path - works with any pattern like /item/5, /xxx/5, /card/5, etc.
+    // Extract item ID from URL path - only works with pattern /stitch/#
     public func extractItemIdFromUrl(url: Text) : ?Nat {
-        // Split URL by '/' and look for any numeric ID after any path segment
+        // Split URL by '/' and look for "stitch" followed by a numeric ID
         let parts = Iter.toArray(Text.split(url, #char '/'));
 
         var i = 0;
@@ -43,8 +43,8 @@ module {
         while (i < partsSize) {
             let part = parts[i];
 
-            // Skip empty parts
-            if (part != "") {
+            // Check if this part is "stitch"
+            if (part == "stitch") {
                 // Check if next part exists and could be an ID
                 if (i + 1 < partsSize) {
                     let potentialId = parts[i + 1];
@@ -54,21 +54,12 @@ module {
                     // Try to parse as number
                     switch (Nat.fromText(idClean)) {
                         case (?id) {
-                            // Found a valid numeric ID!
-                            // Only return if the path segment before it is not a number
-                            // This ensures we get the ID part, not just any number in the URL
-                            switch (Nat.fromText(part)) {
-                                case null {
-                                    // Previous part is not a number, so this is likely the ID
-                                    return ?id;
-                                };
-                                case (?_) {
-                                    // Previous part is also a number, keep looking
-                                };
-                            };
+                            // Found a valid numeric ID after "stitch"
+                            return ?id;
                         };
                         case null {
-                            // Not a number, keep looking
+                            // Not a number after "stitch"
+                            return null;
                         };
                     };
                 };
