@@ -1,16 +1,17 @@
 import Text "mo:core/Text";
 import Int "mo:core/Int";
 import Time "mo:core/Time";
-import Principal "mo:core/Principal";
 import Debug "mo:core/Debug";
 import Blob "mo:core/Blob";
 import Array "mo:core/Array";
-import Nat "mo:core/Nat";
 import Nat8 "mo:core/Nat8";
 import JWT "mo:jwt@2";
 import BaseX "mo:base-x-encoder";
 import ECDSA "mo:ecdsa";
 import Sha256 "mo:sha2@0/Sha256";
+import IC "mo:ic";
+import ICall "mo:ic/Call";
+import Nat64 "mo:core/Nat64";
 
 module {
     public type MintResult = {
@@ -21,48 +22,10 @@ module {
         isValid : Bool;
     };
 
-    type EcdsaCurve = {
-        #secp256k1;
-    };
-
-    type EcdsaKeyId = {
-        curve : EcdsaCurve;
-        name : Text;
-    };
-
-    type EcdsaPublicKeyRequest = {
-        canister_id : ?Principal;
-        derivation_path : [Blob];
-        key_id : EcdsaKeyId;
-    };
-
-    type EcdsaPublicKeyResponse = {
-        public_key : Blob;
-        chain_code : Blob;
-    };
-
-    type EcdsaSignRequest = {
-        message_hash : Blob;
-        derivation_path : [Blob];
-        key_id : EcdsaKeyId;
-    };
-
-    type EcdsaSignResponse = {
-        signature : Blob;
-    };
-
-    let ic = actor "aaaaa-aa" : actor {
-        ecdsa_public_key : (EcdsaPublicKeyRequest) -> async EcdsaPublicKeyResponse;
-        sign_with_ecdsa : (EcdsaSignRequest) -> async EcdsaSignResponse;
-    };
-
-    let keyId : EcdsaKeyId = {
+    let keyId : { name : Text; curve : IC.EcdsaCurve } = {
         curve = #secp256k1;
         name = "dfx_test_key";
     };
-
-    let signWithEcdsaCycles : Nat = 26_153_846_153;
-    let ecdsaPublicKeyCycles : Nat = 10_000_000_000;
 
     public func mintTestToken() : async MintResult {
         let headerJson = "{\"alg\":\"ES256K\",\"typ\":\"JWT\"}";
@@ -86,7 +49,7 @@ module {
         let signingInputBytes = Blob.toArray(Text.encodeUtf8(signingInput));
         let hashBlob = Sha256.fromArray(#sha256, signingInputBytes);
 
-        let signResponse = await (with cycles = signWithEcdsaCycles) ic.sign_with_ecdsa({
+        let signResponse = await ICall.signWithEcdsa({
             message_hash = hashBlob;
             derivation_path = [];
             key_id = keyId;
@@ -98,11 +61,17 @@ module {
 
         let token = signingInput # "." # signatureEncoded;
 
-        let pkResponse = await (with cycles = ecdsaPublicKeyCycles) ic.ecdsa_public_key({
+        let publicKeyRequest = {
             canister_id = null;
             derivation_path = [];
             key_id = keyId;
-        });
+        };
+
+        let methodNameSize = Nat64.fromNat("ecdsa_public_key".size());
+        let payloadSize = Nat64.fromNat(Blob.size(to_candid (publicKeyRequest)));
+        let cycles = ICall.Cost.call(methodNameSize, payloadSize);
+
+        let pkResponse = await (with cycles) IC.ic.ecdsa_public_key(publicKeyRequest);
 
         let publicKeyHex = bytesToHex(Blob.toArray(pkResponse.public_key));
 
