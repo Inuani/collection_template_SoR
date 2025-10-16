@@ -7,10 +7,10 @@ import Blob "mo:core/Blob";
 import Array "mo:core/Array";
 import Nat "mo:core/Nat";
 import Nat8 "mo:core/Nat8";
-import SHA "sha";
 import JWT "mo:jwt@2";
 import BaseX "mo:base-x-encoder";
 import ECDSA "mo:ecdsa";
+import Sha256 "mo:sha2@0/Sha256";
 
 module {
     public type MintResult = {
@@ -84,8 +84,7 @@ module {
         let signingInput = headerEncoded # "." # payloadEncoded;
 
         let signingInputBytes = Blob.toArray(Text.encodeUtf8(signingInput));
-        let messageHash = SHA.sha256(signingInputBytes);
-        let hashBlob = Blob.fromArray(messageHash);
+        let hashBlob = Sha256.fromArray(#sha256, signingInputBytes);
 
         let signResponse = await (with cycles = signWithEcdsaCycles) ic.sign_with_ecdsa({
             message_hash = hashBlob;

@@ -37,7 +37,7 @@ Isync:
 	icx-asset --replica https://ic0.app --pem ~/.config/dfx/identity/raygen/identity.pem sync $(CANISTER_ID) ./public
 
 protect:
-	python3 scripts/setup_route.py $(CANISTER_ID) item/2 --cmac-count 200
+	python3 scripts/setup_route.py $(CANISTER_ID) item/1 --cmac-count 200
 
 protect_ic:
 	python3 scripts/setup_route.py $(CANISTER_ID) files/certificat_1 --cmac-count $(CMAC_COUNT) --ic --random-key
