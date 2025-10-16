@@ -19,6 +19,7 @@ import FileService "services/file_service";
 import CollectionService "services/collection_service";
 import StitchingService "services/stitching_service";
 import AssetService "services/asset_service";
+import JwtHelper "utils/jwt_helper";
 
 shared ({ caller = initializer }) persistent actor class Actor() = self {
 
@@ -145,6 +146,11 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     public query func getStoredFileCount() : async Nat {
         fileService.getStoredFileCount();
+    };
+
+    // Utility to test JWT minting via management canister ECDSA
+    public shared func testMintJwt() : async JwtHelper.MintResult {
+        await JwtHelper.mintTestToken();
     };
 
     // ============================================
