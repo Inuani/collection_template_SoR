@@ -30,7 +30,7 @@ echo ""
 # Add Item 2
 echo "Adding Item 2: Hoodie #2..."
 dfx canister --network "$NETWORK" call "$CANISTER_NAME" addCollectionItem \
-  '("Hoodie #2", "/thumb_2.webp", "/item2.webp", "The intense blue-black of a stormy midnight sky", "Rare", vec {record{"Type"; "Storm"}; record{"Intensity"; "Deep"}; record{"Mood"; "Mysterious"}})' \
+  '("Hoodie #2", "/thumb_2.webp", "/item_2.webp", "The intense blue-black of a stormy midnight sky", "Rare", vec {record{"Type"; "Storm"}; record{"Intensity"; "Deep"}; record{"Mood"; "Mysterious"}})' \
   && echo "✓ Item 2 added" || echo "✗ Failed to add Item 2"
 
 echo ""
