@@ -213,16 +213,6 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     // PROOF-OF-STITCHING API FUNCTIONS
     // ============================================
 
-    // Add tokens to an item
-    public shared func addTokens(itemId: Nat, amount: Nat) : async Result.Result<(), Text> {
-        stitchingService.addTokens(itemId, amount)
-    };
-
-    // Record a stitching for multiple items
-    public shared func recordStitching(itemIds: [Nat], stitchingId: Text, tokensEarned: Nat) : async Result.Result<(), Text> {
-        stitchingService.recordStitching(itemIds, stitchingId, tokensEarned)
-    };
-
     // Get item's token balance
     public query func getItemBalance(itemId: Nat) : async Result.Result<Nat, Text> {
         stitchingService.getItemBalance(itemId)

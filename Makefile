@@ -97,3 +97,9 @@ button_create:
 
 buttons_see_all:
 	dfx canister call $(CANISTER_NAME) getAllButtons
+
+top-up:
+	dfx cycles top-up --ic $(CANISTER_ID) 1T
+
+wallet top-up:
+	dfx wallet send --ic $(CANISTER_ID) 1000000000000
