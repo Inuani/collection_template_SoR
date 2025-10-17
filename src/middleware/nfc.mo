@@ -252,17 +252,17 @@ module NFCMiddleware {
                                             let updatedItems = Array.concat(itemsInSession, [itemId]);
                                             let itemsText = StitchingToken.itemsToText(updatedItems);
 
-                                            // Generate cryptographically secure finalization token
-                                            let finalizeToken = await StitchingToken.generateFinalizeToken();
+                                            // Generate session identifier
+                                            let sessionId = await StitchingToken.generateSessionId();
                                             let startTime = now;
 
                                             // Build JWT claims and mint token
                                             let claims = StitchingToken.buildClaims({
                                                 issuer = StitchingToken.defaultIssuer;
-                                                subject = StitchingToken.defaultSubjectPrefix # ":" # finalizeToken;
+                                                subject = StitchingToken.defaultSubjectPrefix # ":" # sessionId;
+                                                sessionId = sessionId;
                                                 items = updatedItems;
                                                 startTime = startTime;
-                                                finalizeToken = finalizeToken;
                                                 now = now;
                                                 ttlSeconds = tokenTtlSeconds;
                                             });

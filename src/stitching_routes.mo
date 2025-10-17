@@ -34,13 +34,6 @@ module StitchingRoutes {
         }
     };
 
-    func getFinalizeToken(state: StitchingToken.StitchingState) : Text {
-        switch (state.finalizeToken) {
-            case null "";
-            case (?token) token;
-        }
-    };
-
     func clearJwtCookieHeader() : (Text, Text) {
         (
             "Set-Cookie",
@@ -126,10 +119,7 @@ module StitchingRoutes {
                         // Get stitching start time from session to pass to frontend
                         let stitchingStartTime = getStartTimeText(state);
 
-                        // Get finalize token from session to pass to frontend
-                        let finalizeToken = getFinalizeToken(state);
-
-                        let html = Stitching.generateWaitingPage(item, itemsInSession, stitchingStartTime, finalizeToken, themeManager);
+                        let html = Stitching.generateWaitingPage(item, itemsInSession, stitchingStartTime, themeManager);
                         ctx.buildResponse(#ok, #html(html))
                     };
                 }
@@ -212,10 +202,7 @@ module StitchingRoutes {
                 // Get stitching start time from session to pass to frontend
                 let stitchingStartTime = getStartTimeText(state);
 
-                // Get finalize token from session to pass to frontend
-                let finalizeToken = getFinalizeToken(state);
-
-                let html = Stitching.generateActiveSessionPage(itemsInSession, allItems, stitchingStartTime, finalizeToken, themeManager);
+                let html = Stitching.generateActiveSessionPage(itemsInSession, allItems, stitchingStartTime, themeManager);
                 ctx.buildResponse(#ok, #html(html))
             }),
 
@@ -224,10 +211,8 @@ module StitchingRoutes {
                 Debug.print("[FINALIZE] Endpoint called");
 
                 // 1. Verify token first
-                let urlToken = ctx.getQueryParam("token");
                 let isManual = ctx.getQueryParam("manual");
 
-                Debug.print("[FINALIZE] URL token: " # (switch(urlToken) { case null "NONE"; case (?t) t }));
                 Debug.print("[FINALIZE] Manual flag: " # (switch(isManual) { case null "false"; case (?_) "true" }));
 
                 let stateOpt = getStitchingState(ctx);
@@ -239,32 +224,6 @@ module StitchingRoutes {
                         return ctx.buildResponse(#unauthorized, #html(html));
                     };
                     case (?value) value;
-                };
-
-                let sessionToken = state.finalizeToken;
-
-                Debug.print("[FINALIZE] Session token: " # (switch(sessionToken) { case null "NONE"; case (?t) t }));
-
-                // Check if tokens match
-                switch (urlToken, sessionToken) {
-                    case (null, _) {
-                        Debug.print("[FINALIZE] REJECTED - No token in URL");
-                        let html = "<html><body><h1>Error</h1><p>Missing finalization token.</p></body></html>";
-                        return ctx.buildResponse(#unauthorized, #html(html));
-                    };
-                    case (_, null) {
-                        Debug.print("[FINALIZE] REJECTED - No token in JWT (already used or expired)");
-                        let html = "<html><body><h1>Error</h1><p>Stitching already finalized or session expired.</p></body></html>";
-                        return ctx.buildResponse(#unauthorized, #html(html));
-                    };
-                    case (?urlT, ?sessionT) {
-                        if (urlT != sessionT) {
-                            Debug.print("[FINALIZE] REJECTED - Token mismatch");
-                            let html = "<html><body><h1>Error</h1><p>Invalid finalization token.</p></body></html>";
-                            return ctx.buildResponse(#unauthorized, #html(html));
-                        };
-                        Debug.print("[FINALIZE] Token verified ✓");
-                    };
                 };
 
                 // 2. Get items from session (unwrap optional)

@@ -12,6 +12,7 @@ import Routes "routes";
 import Files "files";
 import Collection "collection";
 import Result "mo:core/Result";
+import Debug "mo:base/Debug";
 import RouterMiddleware "mo:liminal/Middleware/Router";
 import Theme "utils/theme";
 import Buttons "utils/buttons";
@@ -60,6 +61,10 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     transient let assetMiddlewareConfig : AssetsMiddleware.Config = {
         store = assetStore;
     };
+    transient let jwtVerificationKey = switch (JwtHelper.defaultVerificationKey()) {
+        case (#ok(key)) key;
+        case (#err(err)) Debug.trap("Failed to decode default JWT verification key: " # err);
+    };
     transient let app = Liminal.App({
         middleware = [
             CORSMiddleware.createCORSMiddleware(),
@@ -68,7 +73,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                     expiration = true;
                     notBefore = false;
                     issuer = #one("bleu_travail_core");
-                    signature = #skip;
+                    signature = #key(jwtVerificationKey);
                     audience = #skip;
                 };
                 locations = [

@@ -14,7 +14,7 @@ module {
     public type StitchingState = {
         items : [Nat];
         startTime : ?Int;
-        finalizeToken : ?Text;
+        sessionId : ?Text;
         issuedAt : ?Int;
         expiresAt : ?Int;
     };
@@ -22,9 +22,9 @@ module {
     public type ClaimInput = {
         issuer : Text;
         subject : Text;
+        sessionId : Text;
         items : [Nat];
         startTime : Int;
-        finalizeToken : Text;
         now : Int;
         ttlSeconds : Nat;
     };
@@ -32,9 +32,9 @@ module {
     public type StitchingClaims = {
         issuer : Text;
         subject : Text;
+        sessionId : Text;
         items : [Nat];
         startTime : Int;
-        finalizeToken : Text;
         issuedAt : Int;
         expiresAt : Int;
     };
@@ -48,7 +48,7 @@ module {
         {
             items = [];
             startTime = null;
-            finalizeToken = null;
+            sessionId = null;
             issuedAt = null;
             expiresAt = null;
         }
@@ -86,24 +86,24 @@ module {
     public func parseJWT(token : JWT.Token) : ?StitchingState {
         let items = parseItems(JWT.getPayloadValue(token, "items"));
         let startTime = parseInt(JWT.getPayloadValue(token, "start_time"));
-        let finalizeToken = parseText(JWT.getPayloadValue(token, "finalize_token"));
+        let sessionId = parseText(JWT.getPayloadValue(token, "session_id"));
         let issuedAt = parseInt(JWT.getPayloadValue(token, "iat"));
         let expiresAt = parseInt(JWT.getPayloadValue(token, "exp"));
 
-        if (items == null and startTime == null and finalizeToken == null) {
+        if (items == null and startTime == null and sessionId == null) {
             return null;
         };
 
         ?{
             items = switch (items) { case null { [] }; case (?value) value };
             startTime = startTime;
-            finalizeToken = finalizeToken;
+            sessionId = sessionId;
             issuedAt = issuedAt;
             expiresAt = expiresAt;
         };
     };
 
-    public func generateFinalizeToken() : async Text {
+    public func generateSessionId() : async Text {
         let entropy = await Random.blob();
         let bytes = Blob.toArray(entropy);
         BaseX.toHex(bytes.vals(), { isUpper = false; prefix = #none });
@@ -117,9 +117,9 @@ module {
         {
             issuer = input.issuer;
             subject = input.subject;
+            sessionId = input.sessionId;
             items = input.items;
             startTime = input.startTime;
-            finalizeToken = input.finalizeToken;
             issuedAt = issuedAtSeconds;
             expiresAt = expiresAtSeconds;
         };
@@ -137,11 +137,11 @@ module {
         let payloadBase : [(Text, Json.Json)] = [
             ("iss", #string(claims.issuer)),
             ("sub", #string(claims.subject)),
+            ("session_id", #string(claims.sessionId)),
             ("iat", #number(#int(claims.issuedAt))),
             ("exp", #number(#int(claims.expiresAt))),
             ("items", #array(itemsJson)),
             ("start_time", #string(Int.toText(claims.startTime))),
-            ("finalize_token", #string(claims.finalizeToken)),
         ];
 
         {

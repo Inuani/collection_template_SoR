@@ -107,7 +107,6 @@ module {
         item: Collection.Item,
         itemsInSession: [Nat],
         stitchingStartTime: Text,
-        finalizeToken: Text,
         themeManager: Theme.ThemeManager
     ) : Text {
         let primary = themeManager.getPrimary();
@@ -243,7 +242,7 @@ module {
                 localStorage.removeItem(storageKey);
                 // Wait 500ms to ensure backend timestamp has passed the threshold
                 setTimeout(() => {
-                    window.location.href = '/stitching/finalize_session?token=" # finalizeToken # "';
+                    window.location.href = '/stitching/finalize_session';
                 }, 500);
             }
         }
@@ -285,7 +284,6 @@ module {
         itemsInSession: [Nat],
         allItems: [Collection.Item],
         stitchingStartTime: Text,
-        finalizeToken: Text,
         themeManager: Theme.ThemeManager
     ) : Text {
         let primary = themeManager.getPrimary();
@@ -461,7 +459,7 @@ module {
                 localStorage.removeItem(storageKey);
                 // Wait 500ms to ensure backend timestamp has passed the threshold
                 setTimeout(() => {
-                    window.location.href = '/stitching/finalize_session?token=" # finalizeToken # "';
+                    window.location.href = '/stitching/finalize_session';
                 }, 500);
             }
         }
@@ -492,7 +490,7 @@ module {
 
             <div class=\"actions\">
                 <a href=\"/collection\" class=\"btn btn-secondary\">Annuler</a>
-                <a href=\"/stitching/finalize_session?token=" # finalizeToken # "&manual=true\" class=\"btn btn-primary\">Finaliser la Stitching</a>
+                <a href=\"/stitching/finalize_session?manual=true\" class=\"btn btn-primary\">Finaliser la Stitching</a>
             </div>
         </div>
     </div>

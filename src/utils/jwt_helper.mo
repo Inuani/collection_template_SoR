@@ -4,7 +4,9 @@ import Time "mo:core/Time";
 import Debug "mo:core/Debug";
 import Blob "mo:core/Blob";
 import Array "mo:core/Array";
+import Nat "mo:core/Nat";
 import Nat8 "mo:core/Nat8";
+import Result "mo:core/Result";
 import JWT "mo:jwt@2";
 import Json "mo:json@1";
 import BaseX "mo:base-x-encoder";
@@ -15,6 +17,7 @@ import ICall "mo:ic/Call";
 import Nat64 "mo:core/Nat64";
 
 module {
+    public let defaultPublicKeyHex : Text = "0367e89337187bad2aed4c207194da86e3d52062da4cb6bffcc0e93c369e2bd338";
     public type MintResult = {
         token : Text;
         publicKeyHex : Text;
@@ -25,7 +28,7 @@ module {
 
     let keyId : { name : Text; curve : IC.EcdsaCurve } = {
         curve = #secp256k1;
-        name = "dfx_test_key";
+        name = "test_key_1";
     };
 
     public func mintUnsignedToken(unsigned : JWT.UnsignedToken) : async Text {
@@ -40,7 +43,10 @@ module {
         });
 
         let signatureDer = Blob.toArray(signResponse.signature);
+        Debug.print("ECDSA signature blob length: " # Nat.toText(signatureDer.size()));
+        Debug.print("ECDSA DER signature (hex): " # bytesToHex(signatureDer));
         let signatureRaw = derToRaw(signatureDer);
+        Debug.print("ECDSA RAW signature (hex): " # bytesToHex(signatureRaw));
         let signatureEncoded = base64UrlEncode(signatureRaw);
 
         signingInput # "." # signatureEncoded;
@@ -104,16 +110,91 @@ module {
         BaseX.toBase64(bytes.vals(), #url({ includePadding = false }));
     };
 
-    func derToRaw(der : [Nat8]) : [Nat8] {
-        switch (ECDSA.signatureFromBytes(der.vals(), ECDSA.secp256k1Curve(), #der)) {
-            case (#ok(signature)) {
-                signature.toBytes(#raw);
-            };
-            case (#err(err)) {
-                Debug.print("Failed to convert DER signature: " # err);
-                Array.repeat<Nat8>(0, 64);
-            };
+    func derToRaw(bytes : [Nat8]) : [Nat8] {
+        if (bytes.size() == 64) {
+            return bytes;
         };
+        let zeroSig = Array.repeat<Nat8>(0, 64);
+        if (bytes.size() < 2 or bytes[0] != 0x30) {
+            Debug.print("Failed to convert DER signature: missing SEQUENCE header");
+            return zeroSig;
+        };
+
+        func readLength(start : Nat) : ?{ len : Nat; next : Nat } {
+            if (start >= bytes.size()) { return null };
+            let first = bytes[start];
+            if ((first & 0x80) == 0) {
+                return ?{ len = Nat8.toNat(first); next = start + 1 };
+            };
+            let numBytes = Nat8.toNat(first & 0x7f);
+            if (numBytes == 0 or start + 1 + numBytes > bytes.size()) { return null };
+            var idx = start + 1;
+            var len : Nat = 0;
+            var i : Nat = 0;
+            while (i < numBytes) {
+                len := (len * 256) + Nat8.toNat(bytes[idx]);
+                idx += 1;
+                i += 1;
+            };
+            ?{ len = len; next = idx };
+        };
+
+        var index : Nat = 1;
+        let ?seq = readLength(index) else {
+            Debug.print("Failed to convert DER signature: invalid sequence length");
+            return zeroSig;
+        };
+        index := seq.next;
+        if (index + seq.len > bytes.size()) {
+            Debug.print("Failed to convert DER signature: sequence length exceeds buffer");
+            return zeroSig;
+        };
+
+        func readInteger() : ?[Nat8] {
+            if (index >= bytes.size() or bytes[index] != 0x02) {
+                return null;
+            };
+            index += 1;
+            let ?lenInfo = readLength(index) else { return null };
+            index := lenInfo.next;
+            if (index + lenInfo.len > bytes.size()) { return null };
+            let slice = Array.tabulate<Nat8>(lenInfo.len, func(i) = bytes[index + i]);
+            index += lenInfo.len;
+            // Strip leading zeros
+            var firstNonZero : Nat = 0;
+            while (firstNonZero < slice.size() and slice[firstNonZero] == 0) {
+                firstNonZero += 1;
+            };
+            if (firstNonZero == slice.size()) {
+                return ?Array.repeat<Nat8>(1, 0);
+            };
+            ?Array.tabulate<Nat8>(slice.size() - firstNonZero, func(i) = slice[firstNonZero + i]);
+        };
+
+        func padTo32(value : [Nat8]) : [Nat8] {
+            if (value.size() >= 32) {
+                if (value.size() == 32) { return value };
+                let start = value.size() - 32;
+                return Array.tabulate<Nat8>(32, func(i) = value[start + i]);
+            };
+            let padding = 32 - value.size();
+            Array.tabulate<Nat8>(
+                32,
+                func(i) = if (i < padding) 0 else value[i - padding],
+            );
+        };
+
+        switch (readInteger(), readInteger()) {
+            case (?rBytes, ?sBytes) {
+                let r = padTo32(rBytes);
+                let s = padTo32(sBytes);
+                Array.tabulate<Nat8>(64, func(i) = if (i < 32) r[i] else s[i - 32]);
+            };
+            case (_) {
+                Debug.print("Failed to convert DER signature: could not read INTEGER values");
+                zeroSig;
+            };
+        }
     };
 
     func bytesToHex(bytes : [Nat8]) : Text {
@@ -121,5 +202,21 @@ module {
             isUpper = false;
             prefix = #none;
         });
+    };
+
+    public func decodeSecp256k1PublicKey(hex : Text) : Result.Result<ECDSA.PublicKey, Text> {
+        switch (BaseX.fromHex(hex, { prefix = #none })) {
+            case (#ok(bytes)) {
+                ECDSA.publicKeyFromBytes(bytes.vals(), #raw({ curve = ECDSA.secp256k1Curve() }));
+            };
+            case (#err(err)) #err(err);
+        };
+    };
+
+    public func defaultVerificationKey() : Result.Result<JWT.SignatureVerificationKey, Text> {
+        switch (decodeSecp256k1PublicKey(defaultPublicKeyHex)) {
+            case (#ok(pk)) #ok(#ecdsa(pk));
+            case (#err(err)) #err(err);
+        };
     };
 };
