@@ -6,6 +6,7 @@ import Blob "mo:core/Blob";
 import Array "mo:core/Array";
 import Nat8 "mo:core/Nat8";
 import JWT "mo:jwt@2";
+import Json "mo:json@1";
 import BaseX "mo:base-x-encoder";
 import ECDSA "mo:ecdsa";
 import Sha256 "mo:sha2@0/Sha256";
@@ -27,25 +28,8 @@ module {
         name = "dfx_test_key";
     };
 
-    public func mintTestToken() : async MintResult {
-        let headerJson = "{\"alg\":\"ES256K\",\"typ\":\"JWT\"}";
-
-        let now = Time.now();
-        let iatSeconds = now / 1_000_000_000;
-        let expSeconds = iatSeconds + 300;
-
-        let payloadJson =
-            "{" #
-            "\"iss\":\"bleu_travail_core\"," #
-            "\"sub\":\"stitching-test\"," #
-            "\"iat\":" # Int.toText(iatSeconds) # "," #
-            "\"exp\":" # Int.toText(expSeconds) #
-            "}";
-
-        let headerEncoded = base64UrlEncode(Blob.toArray(Text.encodeUtf8(headerJson)));
-        let payloadEncoded = base64UrlEncode(Blob.toArray(Text.encodeUtf8(payloadJson)));
-        let signingInput = headerEncoded # "." # payloadEncoded;
-
+    public func mintUnsignedToken(unsigned : JWT.UnsignedToken) : async Text {
+        let signingInput = JWT.toTextUnsigned(unsigned);
         let signingInputBytes = Blob.toArray(Text.encodeUtf8(signingInput));
         let hashBlob = Sha256.fromArray(#sha256, signingInputBytes);
 
@@ -59,7 +43,28 @@ module {
         let signatureRaw = derToRaw(signatureDer);
         let signatureEncoded = base64UrlEncode(signatureRaw);
 
-        let token = signingInput # "." # signatureEncoded;
+        signingInput # "." # signatureEncoded;
+    };
+
+    public func mintTestToken() : async MintResult {
+        let now = Time.now();
+        let iatSeconds = now / 1_000_000_000;
+        let expSeconds = iatSeconds + 300;
+
+        let unsigned : JWT.UnsignedToken = {
+            header = [
+                ("alg", #string("ES256K")),
+                ("typ", #string("JWT")),
+            ];
+            payload = [
+                ("iss", #string("bleu_travail_core")),
+                ("sub", #string("stitching-test")),
+                ("iat", #number(#int(iatSeconds))),
+                ("exp", #number(#int(expSeconds))),
+            ];
+        };
+
+        let token = await mintUnsignedToken(unsigned);
 
         let publicKeyRequest = {
             canister_id = null;
@@ -82,6 +87,9 @@ module {
                 false;
             };
         };
+
+        let headerJson = Json.stringify(#object_(unsigned.header), null);
+        let payloadJson = Json.stringify(#object_(unsigned.payload), null);
 
         {
             token = token;

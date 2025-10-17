@@ -2,7 +2,7 @@ import Liminal "mo:liminal";
 import Principal "mo:core/Principal";
 import Error "mo:core/Error";
 import AssetsMiddleware "mo:liminal/Middleware/Assets";
-import SessionMiddleware "mo:liminal/Middleware/Session";
+import JWTMiddleware "mo:liminal/Middleware/JWT";
 import CORSMiddleware "middleware/cors";
 import NFCMiddleware "middleware/nfc";
 import HttpAssets "mo:http-assets@0";
@@ -60,30 +60,22 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     transient let assetMiddlewareConfig : AssetsMiddleware.Config = {
         store = assetStore;
     };
-
-
-
-
-    // Configure session middleware for stitching system
-    transient let sessionStore = SessionMiddleware.buildInMemoryStore();
-    transient let sessionConfig : SessionMiddleware.Config = {
-        cookieName = "stitching_session";
-        idleTimeout = 3 * 60; // 3 minutes in seconds (longer than stitching duration)
-        cookieOptions = {
-            path = "/";
-            secure = false; // Set to true in production with HTTPS
-            httpOnly = true;
-            sameSite = ?#lax;
-            maxAge = ?(3 * 60); // 3 minutes
-        };
-        store = sessionStore;
-        idGenerator = SessionMiddleware.generateRandomId;
-    };
-
     transient let app = Liminal.App({
         middleware = [
             CORSMiddleware.createCORSMiddleware(),
-            SessionMiddleware.new(sessionConfig),
+            JWTMiddleware.new({
+                validation = {
+                    expiration = true;
+                    notBefore = false;
+                    issuer = #one("bleu_travail_core");
+                    signature = #skip;
+                    audience = #skip;
+                };
+                locations = [
+                    #cookie("stitching_jwt"),
+                    #header("Authorization"),
+                ];
+            }),
             NFCMiddleware.createNFCProtectionMiddleware(protected_routes_storage, themeManager),
             AssetsMiddleware.new(assetMiddlewareConfig),
             RouterMiddleware.new(Routes.routerConfig(

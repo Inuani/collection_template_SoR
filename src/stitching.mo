@@ -219,8 +219,10 @@ module {
         let startTime = serverStartTimeMs;
         localStorage.setItem(storageKey, String(startTime));
 
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        console.log('[Waiting Page] Timer synchronized with backend - elapsed:', elapsed, 'seconds');
+        const initialElapsed = Math.floor((Date.now() - startTime) / 1000);
+        console.log('[Waiting Page] Timer synchronized with backend - elapsed:', initialElapsed, 'seconds');
+
+        let finalizeTriggered = false;
 
         function updateCountdown() {
             const countdownEl = document.getElementById('countdown');
@@ -233,9 +235,11 @@ module {
             const seconds = remainingSeconds % 60;
             countdownEl.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
 
-            if (remainingSeconds === 0) {
+            if (remainingSeconds === 0 && !finalizeTriggered) {
                 console.log('[Waiting Page] Timer expired - auto-finalizing stitching');
+                finalizeTriggered = true;
                 countdownEl.textContent = 'Finalizing...';
+                clearInterval(countdownInterval);
                 localStorage.removeItem(storageKey);
                 // Wait 500ms to ensure backend timestamp has passed the threshold
                 setTimeout(() => {
@@ -244,7 +248,7 @@ module {
             }
         }
 
-        setInterval(updateCountdown, 1000);
+        const countdownInterval = setInterval(updateCountdown, 1000);
         updateCountdown();
 
         // No polling needed - when a second item is scanned, the server will redirect automatically
@@ -433,8 +437,10 @@ module {
         let startTime = serverStartTimeMs;
         localStorage.setItem(storageKey, String(startTime));
 
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        console.log('[Active Page] Timer synchronized with backend - elapsed:', elapsed, 'seconds');
+        const initialElapsed = Math.floor((Date.now() - startTime) / 1000);
+        console.log('[Active Page] Timer synchronized with backend - elapsed:', initialElapsed, 'seconds');
+
+        let finalizeTriggered = false;
 
         function updateCountdown() {
             const countdownEl = document.getElementById('countdown');
@@ -447,9 +453,11 @@ module {
             const seconds = remainingSeconds % 60;
             countdownEl.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
 
-            if (remainingSeconds === 0) {
+            if (remainingSeconds === 0 && !finalizeTriggered) {
                 console.log('[Active Page] Timer expired - auto-finalizing stitching');
+                finalizeTriggered = true;
                 countdownEl.textContent = 'Finalizing...';
+                clearInterval(countdownInterval);
                 localStorage.removeItem(storageKey);
                 // Wait 500ms to ensure backend timestamp has passed the threshold
                 setTimeout(() => {
@@ -458,7 +466,7 @@ module {
             }
         }
 
-        setInterval(updateCountdown, 1000);
+        const countdownInterval = setInterval(updateCountdown, 1000);
         updateCountdown();
     </script>
 </head>

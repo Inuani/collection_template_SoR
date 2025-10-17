@@ -6,13 +6,21 @@ import Iter "mo:core/Iter";
 import Array "mo:core/Array";
 import App "mo:liminal/App";
 import HttpContext "mo:liminal/HttpContext";
-import SessionMiddleware "mo:liminal/Middleware/Session";
 import ProtectedRoutes "../nfc_protec_routes";
 import Scan "../utils/scan";
 import InvalidScan "../utils/invalid_scan";
 import Theme "../utils/theme";
+import StitchingToken "../utils/stitching_token";
+import JwtHelper "../utils/jwt_helper";
 
 module NFCMiddleware {
+
+    let tokenTtlSeconds : Nat = 180;
+
+    func buildJwtCookie(token : Text) : Text {
+        let maxAge = Nat.toText(tokenTtlSeconds);
+        StitchingToken.tokenCookieName # "=" # token # "; Path=/; HttpOnly; SameSite=Lax; Max-Age=" # maxAge;
+    };
 
     // ========================================
     // NFC Utility Functions
@@ -217,84 +225,68 @@ module NFCMiddleware {
                                     // Update scan count
                                     ignore protected_routes_storage.verifyRouteAccess(path, url);
 
-                                    // Get session from context (unwrap optional)
-                                    switch (context.session) {
-                                        case null {
-                                            // No session available - shouldn't happen with session middleware
+                                    let identityStateOpt = StitchingToken.fromIdentity(context.getIdentity());
+                                    let baseState = switch (identityStateOpt) {
+                                        case (?state) state;
+                                        case null StitchingToken.empty();
+                                    };
+                                    let itemsInSession = baseState.items;
+
+                                    // Check if item already in current stitching state
+                                    let alreadyScanned = Array.find<Nat>(itemsInSession, func(id) = id == itemId);
+
+                                    switch (alreadyScanned) {
+                                        case (?_) {
+                                            // Already scanned - show error
+                                            let html = "<html><body><h1>Already Scanned</h1><p>This item is already in the stitching.</p></body></html>";
                                             return {
-                                                statusCode = 500;
+                                                statusCode = 200;
                                                 headers = [("Content-Type", "text/html")];
-                                                body = ?Text.encodeUtf8("<html><body><h1>Session Error</h1><p>Session not available.</p></body></html>");
+                                                body = ?Text.encodeUtf8(html);
                                                 streamingStrategy = null;
                                             };
                                         };
-                                        case (?session) {
-                                            // Check if session has active stitching
-                                            let itemsInSession = switch (session.get("stitching_items")) {
-                                                case null { [] }; // No stitching yet
-                                                case (?itemsText) {
-                                                    // Parse existing items
-                                                    let parts = Iter.toArray(Text.split(itemsText, #char ','));
-                                                    var items : [Nat] = [];
-                                                    for (part in parts.vals()) {
-                                                        switch (Nat.fromText(part)) {
-                                                            case (?n) { items := Array.concat(items, [n]); };
-                                                            case null {};
-                                                        };
-                                                    };
-                                                    items
-                                                };
+                                        case null {
+                                            // Build updated stitching state
+                                            let now = Time.now();
+                                            let updatedItems = Array.concat(itemsInSession, [itemId]);
+                                            let itemsText = StitchingToken.itemsToText(updatedItems);
+
+                                            // Generate cryptographically secure finalization token
+                                            let finalizeToken = await StitchingToken.generateFinalizeToken();
+                                            let startTime = now;
+
+                                            // Build JWT claims and mint token
+                                            let claims = StitchingToken.buildClaims({
+                                                issuer = StitchingToken.defaultIssuer;
+                                                subject = StitchingToken.defaultSubjectPrefix # ":" # finalizeToken;
+                                                items = updatedItems;
+                                                startTime = startTime;
+                                                finalizeToken = finalizeToken;
+                                                now = now;
+                                                ttlSeconds = tokenTtlSeconds;
+                                            });
+                                            let unsignedToken = StitchingToken.toUnsignedToken(claims);
+                                            let jwt = await JwtHelper.mintUnsignedToken(unsignedToken);
+                                            let cookieValue = buildJwtCookie(jwt);
+
+                                            // Redirect to stitching page
+                                            let redirectUrl = if (updatedItems.size() == 1) {
+                                                "/stitching/waiting?item=" # Nat.toText(itemId)
+                                            } else {
+                                                "/stitching/active?items=" # itemsText
                                             };
 
-                                            // Check if item already in session
-                                            let alreadyScanned = Array.find<Nat>(itemsInSession, func(id) = id == itemId);
+                                            let html = "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0;url=" # redirectUrl # "'></head><body> Scanned! Redirecting...</body></html>";
 
-                                            switch (alreadyScanned) {
-                                                case (?_) {
-                                                    // Already scanned - show error
-                                                    let html = "<html><body><h1>Already Scanned</h1><p>This item is already in the stitching.</p></body></html>";
-                                                    return {
-                                                        statusCode = 200;
-                                                        headers = [("Content-Type", "text/html")];
-                                                        body = ?Text.encodeUtf8(html);
-                                                        streamingStrategy = null;
-                                                    };
-                                                };
-                                                case null {
-                                                    // Add to session
-                                                    let updatedItems = Array.concat(itemsInSession, [itemId]);
-                                                    var itemsText = "";
-                                                    var first = true;
-                                                    for (id in updatedItems.vals()) {
-                                                        if (not first) { itemsText #= "," };
-                                                        itemsText #= Nat.toText(id);
-                                                        first := false;
-                                                    };
-                                                    session.set("stitching_items", itemsText);
-
-                                                    // Store/update stitching timestamp - reset timer on each new scan
-                                                    session.set("stitching_start_time", Int.toText(Time.now()));
-
-                                                    // Generate cryptographically secure finalization token
-                                                    let finalizeToken = await* SessionMiddleware.generateRandomId();
-                                                    session.set("stitching_finalize_token", finalizeToken);
-
-                                                    // Redirect to stitching page
-                                                    let redirectUrl = if (updatedItems.size() == 1) {
-                                                        "/stitching/waiting?item=" # Nat.toText(itemId)
-                                                    } else {
-                                                        "/stitching/active?items=" # itemsText
-                                                    };
-
-                                                    let html = "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0;url=" # redirectUrl # "'></head><body> Scanned! Redirecting...</body></html>";
-
-                                                    return {
-                                                        statusCode = 200;
-                                                        headers = [("Content-Type", "text/html")];
-                                                        body = ?Text.encodeUtf8(html);
-                                                        streamingStrategy = null;
-                                                    };
-                                                };
+                                            return {
+                                                statusCode = 200;
+                                                headers = [
+                                                    ("Content-Type", "text/html"),
+                                                    ("Set-Cookie", cookieValue),
+                                                ];
+                                                body = ?Text.encodeUtf8(html);
+                                                streamingStrategy = null;
                                             };
                                         };
                                     };
