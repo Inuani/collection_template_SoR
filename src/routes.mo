@@ -14,6 +14,7 @@ import Theme "utils/theme";
 import Files "files";
 import Buttons "utils/buttons";
 import StitchingRoutes "stitching_routes";
+import PendingSessions "utils/pending_sessions";
 
 module Routes {
    public func routerConfig(
@@ -28,7 +29,8 @@ module Routes {
        collection: Collection.Collection,
        themeManager: Theme.ThemeManager,
        fileStorage: Files.FileStorage,
-       buttonsManager: Buttons.ButtonsManager
+       buttonsManager: Buttons.ButtonsManager,
+       pendingSessions: PendingSessions.PendingSessions
    ) : Router.Config {
     {
       prefix              = null;
@@ -58,25 +60,10 @@ module Routes {
                    ctx.buildResponse(#ok, #html(html))
                }),
 
-        Router.getQuery("/stitch/{id}", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
-                   let idText = ctx.getRouteParam("id");
-
-                   let id = switch (Nat.fromText(idText)) {
-                       case (?num) num;
-                       case null {
-                           let html = CollectionView.generateNotFoundPage(0, themeManager);
-                           return ctx.buildResponse(#notFound, #html(html));
-                       };
-                   };
-
-                   let html = CollectionView.generateItemPage(collection, id, themeManager);
-                   ctx.buildResponse(#ok, #html(html))
-               }),
-
         ],
 
         // Stitching routes (extracted to separate module)
-        StitchingRoutes.getStitchingRoutes(collection, themeManager),
+        StitchingRoutes.getStitchingRoutes(collection, themeManager, pendingSessions),
 
         [
 

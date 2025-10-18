@@ -10,8 +10,11 @@ import Iter "mo:core/Iter";
 import Debug "mo:core/Debug";
 import Collection "collection";
 import Theme "utils/theme";
+import CollectionView "collection_view";
 import Stitching "stitching";
 import StitchingToken "utils/stitching_token";
+import PendingSessions "utils/pending_sessions";
+import JwtHelper "utils/jwt_helper";
 
 module StitchingRoutes {
     let stitchingTimeoutNanos : Int = StitchingToken.stitchingTimeoutNanos;
@@ -44,9 +47,25 @@ module StitchingRoutes {
     // Returns all stitching-related routes
     public func getStitchingRoutes(
         collection: Collection.Collection,
-        themeManager: Theme.ThemeManager
+        themeManager: Theme.ThemeManager,
+        pendingSessions: PendingSessions.PendingSessions
     ) : [Router.RouteConfig] {
         return [
+            Router.getQuery("/stitch/{id}", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
+                let idText = ctx.getRouteParam("id");
+
+                let id = switch (Nat.fromText(idText)) {
+                    case (?num) num;
+                    case null {
+                        let html = CollectionView.generateNotFoundPage(0, themeManager);
+                        return ctx.buildResponse(#notFound, #html(html));
+                    };
+                };
+
+                let html = CollectionView.generateItemPage(collection, id, themeManager);
+                ctx.buildResponse(#ok, #html(html))
+            }),
+
             // Stitching waiting page (first scan - waiting for more items)
             Router.getQuery("/stitching/waiting", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
                 Debug.print("[ROUTE] /stitching/waiting accessed");
@@ -294,6 +313,54 @@ module StitchingRoutes {
                     body = ?Text.encodeUtf8("<html><body>Stitching finalized! Redirecting...</body></html>");
                     streamingStrategy = null;
                 };
+            }),
+
+            Router.getAsyncUpdate("/stitching/pending", func(ctx: RouteContext.RouteContext) : async* Liminal.HttpResponse {
+                let sessionIdOpt = ctx.getQueryParam("session");
+                let ?sessionId = sessionIdOpt else {
+                    let html = "<html><body><h1>Session manquante</h1><p>Aucune session en attente. Veuillez rescanner.</p></body></html>";
+                    return ctx.buildResponse(#badRequest, #html(html));
+                };
+
+                let now = Time.now();
+                switch (pendingSessions.take(sessionId, now)) {
+                    case null {
+                        let html = "<html><body><h1>Session expirée</h1><p>Veuillez rescanner le tag NFC pour relancer la séance.</p></body></html>";
+                        return ctx.buildResponse(#unauthorized, #html(html));
+                    };
+                    case (?pending) {
+                        let claims = StitchingToken.buildClaims({
+                            issuer = StitchingToken.defaultIssuer;
+                            subject = StitchingToken.defaultSubjectPrefix # ":" # sessionId;
+                            sessionId = sessionId;
+                            items = pending.items;
+                            startTime = pending.startTime;
+                            now = now;
+                            ttlSeconds = pending.ttlSeconds;
+                        });
+                        let unsignedToken = StitchingToken.toUnsignedToken(claims);
+                        let jwt = await JwtHelper.mintUnsignedToken(unsignedToken);
+                        let cookieValue = StitchingToken.tokenCookieName # "=" # jwt # "; Path=/; HttpOnly; SameSite=Lax; Max-Age=" # Nat.toText(pending.ttlSeconds);
+
+                        let redirectUrl = if (pending.items.size() == 0) {
+                            "/stitching/error"
+                        } else if (pending.items.size() == 1) {
+                            "/stitching/waiting?item=" # Nat.toText(pending.items[0])
+                        } else {
+                            "/stitching/active?items=" # StitchingToken.itemsToText(pending.items)
+                        };
+
+                        return {
+                            statusCode = 303;
+                            headers = [
+                                ("Location", redirectUrl),
+                                ("Set-Cookie", cookieValue)
+                            ];
+                            body = null;
+                            streamingStrategy = null;
+                        };
+                    };
+                }
             }),
 
             // Stitching success route (JWT-based)

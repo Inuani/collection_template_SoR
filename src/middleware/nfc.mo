@@ -11,16 +11,11 @@ import Scan "../utils/scan";
 import InvalidScan "../utils/invalid_scan";
 import Theme "../utils/theme";
 import StitchingToken "../utils/stitching_token";
-import JwtHelper "../utils/jwt_helper";
+import PendingSessions "../utils/pending_sessions";
 
 module NFCMiddleware {
 
     let tokenTtlSeconds : Nat = 180;
-
-    func buildJwtCookie(token : Text) : Text {
-        let maxAge = Nat.toText(tokenTtlSeconds);
-        StitchingToken.tokenCookieName # "=" # token # "; Path=/; HttpOnly; SameSite=Lax; Max-Age=" # maxAge;
-    };
 
     // ========================================
     // NFC Utility Functions
@@ -182,6 +177,7 @@ module NFCMiddleware {
 
     public func createNFCProtectionMiddleware(
         protected_routes_storage: ProtectedRoutes.RoutesStorage,
+        pendingSessions: PendingSessions.PendingSessions,
         themeManager: Theme.ThemeManager
     ) : App.Middleware {
         {
@@ -237,8 +233,16 @@ module NFCMiddleware {
 
                                     switch (alreadyScanned) {
                                         case (?_) {
-                                            // Already scanned - show error
-                                            let html = "<html><body><h1>Already Scanned</h1><p>This item is already in the stitching.</p></body></html>";
+                                            let redirectUrl = if (itemsInSession.size() >= 2) {
+                                                "/stitching/active?items=" # StitchingToken.itemsToText(itemsInSession)
+                                            } else {
+                                                "/stitching/waiting?item=" # Nat.toText(itemId)
+                                            };
+                                            let html = generateScanRedirectPage(
+                                                redirectUrl,
+                                                "Cet objet a déjà rejoint la session.",
+                                                true
+                                            );
                                             return {
                                                 statusCode = 200;
                                                 headers = [("Content-Type", "text/html")];
@@ -250,41 +254,27 @@ module NFCMiddleware {
                                             // Build updated stitching state
                                             let now = Time.now();
                                             let updatedItems = Array.concat(itemsInSession, [itemId]);
-                                            let itemsText = StitchingToken.itemsToText(updatedItems);
 
                                             // Generate session identifier
                                             let sessionId = await StitchingToken.generateSessionId();
                                             let startTime = now;
 
-                                            // Build JWT claims and mint token
-                                            let claims = StitchingToken.buildClaims({
-                                                issuer = StitchingToken.defaultIssuer;
-                                                subject = StitchingToken.defaultSubjectPrefix # ":" # sessionId;
-                                                sessionId = sessionId;
+                                            pendingSessions.put(sessionId, {
                                                 items = updatedItems;
                                                 startTime = startTime;
-                                                now = now;
                                                 ttlSeconds = tokenTtlSeconds;
+                                                createdAt = now;
                                             });
-                                            let unsignedToken = StitchingToken.toUnsignedToken(claims);
-                                            let jwt = await JwtHelper.mintUnsignedToken(unsignedToken);
-                                            let cookieValue = buildJwtCookie(jwt);
 
-                                            // Redirect to stitching page
-                                            let redirectUrl = if (updatedItems.size() == 1) {
-                                                "/stitching/waiting?item=" # Nat.toText(itemId)
-                                            } else {
-                                                "/stitching/active?items=" # itemsText
-                                            };
-
-                                            let html = "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0;url=" # redirectUrl # "'></head><body> Scanned! Redirecting...</body></html>";
+                                            let html = generateScanRedirectPage(
+                                                "/stitching/pending?session=" # sessionId,
+                                                "Scan réussi ! Redirection…",
+                                                false
+                                            );
 
                                             return {
                                                 statusCode = 200;
-                                                headers = [
-                                                    ("Content-Type", "text/html"),
-                                                    ("Set-Cookie", cookieValue),
-                                                ];
+                                                headers = [("Content-Type", "text/html")];
                                                 body = ?Text.encodeUtf8(html);
                                                 streamingStrategy = null;
                                             };

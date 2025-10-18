@@ -21,6 +21,7 @@ import CollectionService "services/collection_service";
 import StitchingService "services/stitching_service";
 import AssetService "services/asset_service";
 import JwtHelper "utils/jwt_helper";
+import PendingSessions "utils/pending_sessions";
 
 shared ({ caller = initializer }) persistent actor class Actor() = self {
 
@@ -48,6 +49,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     transient let fileService = FileService.make(file_storage);
     transient let collectionService = CollectionService.make(initializer, collection);
     transient let stitchingService = StitchingService.make(collection);
+    transient let pendingSessions = PendingSessions.PendingSessions();
 
     transient let setPermissions : HttpAssets.SetPermissions = {
         commit = [initializer];
@@ -81,7 +83,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                     #header("Authorization"),
                 ];
             }),
-            NFCMiddleware.createNFCProtectionMiddleware(protected_routes_storage, themeManager),
+            NFCMiddleware.createNFCProtectionMiddleware(protected_routes_storage, pendingSessions, themeManager),
             AssetsMiddleware.new(assetMiddlewareConfig),
             RouterMiddleware.new(Routes.routerConfig(
                 Principal.toText(canisterId),
@@ -89,7 +91,8 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                 collection,
                 themeManager,
                 file_storage,
-                buttonsManager
+                buttonsManager,
+                pendingSessions
             )),
         ];
         errorSerializer = Liminal.defaultJsonErrorSerializer;

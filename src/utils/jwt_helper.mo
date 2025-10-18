@@ -1,12 +1,14 @@
 import Text "mo:core/Text";
-import Int "mo:core/Int";
+
 import Time "mo:core/Time";
+import Int "mo:core/Int";
 import Debug "mo:core/Debug";
 import Blob "mo:core/Blob";
 import Array "mo:core/Array";
 import Nat "mo:core/Nat";
 import Nat8 "mo:core/Nat8";
 import Result "mo:core/Result";
+import NatX "mo:xtended-numbers@2/NatX";
 import JWT "mo:jwt@2";
 import Json "mo:json@1";
 import BaseX "mo:base-x-encoder";
@@ -174,8 +176,7 @@ module {
         func padTo32(value : [Nat8]) : [Nat8] {
             if (value.size() >= 32) {
                 if (value.size() == 32) { return value };
-                let start = value.size() - 32;
-                return Array.tabulate<Nat8>(32, func(i) = value[start + i]);
+                return Array.tabulate<Nat8>(32, func(i) = value[value.size() - 32 + i]);
             };
             let padding = 32 - value.size();
             Array.tabulate<Nat8>(

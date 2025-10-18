@@ -103,3 +103,9 @@ top-up:
 
 wallet top-up:
 	dfx wallet send --ic $(CANISTER_ID) 1000000000000
+
+logs:
+	dfx canister --ic logs $(CANISTER_NAME)
+
+canister_status:
+	 dfx canister status --ic $(CANISTER_NAME)
