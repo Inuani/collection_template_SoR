@@ -6,13 +6,14 @@ import Array "mo:core/Array";
 import Result "mo:core/Result";
 import Time "mo:core/Time";
 import Int "mo:core/Int";
+import StitchingToken "utils/stitching_token";
 
 module {
     // Stitching Record Type
     public type StitchingRecord = {
         stitching_id: Text;
         date: Int; // timestamp
-        partner_item_ids: [Nat]; // other items in the stitching
+        partner_items: [(Text, Nat)]; // (canisterId, itemId) pairs for other participants
         tokens_earned: Nat;
     };
 
@@ -198,7 +199,13 @@ module {
         };
 
         // Record a stitching for multiple items
-        public func recordStitching(itemIds: [Nat], stitchingId: Text, tokensEarned: Nat) : Result.Result<(), Text> {
+        public func recordStitching(
+            itemIds: [Nat],
+            currentCanisterId: Text,
+            stitchingId: Text,
+            tokensEarned: Nat,
+            participants: [StitchingToken.SessionItem]
+        ) : Result.Result<(), Text> {
             let timestamp = Time.now();
 
             // Update each item with the stitching record
@@ -209,13 +216,25 @@ module {
                     };
                     case (?item) {
                         // Get other participants (exclude current item)
-                        let partnerIds = Array.filter<Nat>(itemIds, func(id) = id != itemId);
+                        let partnerPairs = Array.filter<StitchingToken.SessionItem>(
+                            participants,
+                            func(entry) {
+                                let entryCanisterId = if (entry.canisterId == "") currentCanisterId else entry.canisterId;
+                                not (entryCanisterId == currentCanisterId and entry.itemId == itemId);
+                            }
+                        );
+                        let partnerItems = Array.map<StitchingToken.SessionItem, (Text, Nat)>(
+                            partnerPairs,
+                            func(entry) {
+                                let entryCanisterId = if (entry.canisterId == "") currentCanisterId else entry.canisterId;
+                                (entryCanisterId, entry.itemId)
+                            }
+                        );
 
-                        // Create stitching record
                         let stitchingRecord : StitchingRecord = {
                             stitching_id = stitchingId;
                             date = timestamp;
-                            partner_item_ids = partnerIds;
+                            partner_items = partnerItems;
                             tokens_earned = tokensEarned;
                         };
 

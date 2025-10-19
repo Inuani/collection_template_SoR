@@ -1,7 +1,9 @@
+import Int "mo:core/Int";
 import Text "mo:core/Text";
 import Nat "mo:core/Nat";
 import Collection "collection";
 import Theme "utils/theme";
+import Int "mo:core/Int";
 
 module {
     public func generateCollectionPage(
@@ -192,7 +194,7 @@ module {
 
         var html = "";
         for (record in history.vals()) {
-            let partners = formatPartners(record.partner_item_ids);
+            let partners = formatPartners(record.partner_items);
             html #= "<div class=\"stitching-record\">\n"
                 # "    <div class=\"stitching-date\">Stitching ID: " # record.stitching_id # "</div>\n"
                 # "    <div class=\"stitching-partners\">" # partners # "</div>\n"
@@ -202,19 +204,23 @@ module {
         html
     };
 
-    private func formatPartners(partnerIds: [Nat]) : Text {
-        if (partnerIds.size() == 0) {
+    private func formatPartners(partners: [(Text, Nat)]) : Text {
+        if (partners.size() == 0) {
             return "Solo stitching";
         };
 
-        var parts = "Stitched with items: ";
+        var parts = "Stitched with: ";
         var index = 0;
-        let last = partnerIds.size();
-        while (index < last) {
+        let total = partners.size();
+        while (index < total) {
+            let (canisterId, itemId) = partners[index];
             if (index > 0) {
                 parts #= ", ";
             };
-            parts #= "#" # Nat.toText(partnerIds[index]);
+            parts #= "#" # Nat.toText(itemId);
+            if (canisterId != "") {
+                parts #= " @" # canisterId;
+            };
             index += 1;
         };
         parts

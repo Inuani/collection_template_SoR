@@ -114,7 +114,7 @@ module StitchingRoutes {
                     Debug.print("[Waiting Page] AUTO-FINALIZING MEETING");
                     if (localItemIds.size() > 0) {
                         let stitchingId = "stitching_" # Int.toText(Time.now());
-                        ignore collection.recordStitching(localItemIds, stitchingId, 10);
+                        ignore collection.recordStitching(localItemIds, currentCanisterId, stitchingId, 10, session.items);
                     };
                     pendingSessions.remove(sessionId);
                     let itemsText = StitchingToken.itemsToText(session.items);
@@ -204,7 +204,7 @@ module StitchingRoutes {
                     let localItemIds = sessionItemsToLocalItemIds(session.items, currentCanisterId);
                     if (localItemIds.size() > 0) {
                         let stitchingId = "stitching_" # Int.toText(Time.now());
-                        ignore collection.recordStitching(localItemIds, stitchingId, 10);
+                        ignore collection.recordStitching(localItemIds, currentCanisterId, stitchingId, 10, session.items);
                     };
                     pendingSessions.remove(sessionId);
                     let itemsText = StitchingToken.itemsToText(session.items);
@@ -277,7 +277,7 @@ module StitchingRoutes {
                 let localItemIds = sessionItemsToLocalItemIds(session.items, currentCanisterId);
                 if (localItemIds.size() > 0) {
                     let stitchingId = "stitching_" # Int.toText(Time.now());
-                    ignore collection.recordStitching(localItemIds, stitchingId, 10);
+                    ignore collection.recordStitching(localItemIds, currentCanisterId, stitchingId, 10, session.items);
                 } else {
                     Debug.print("[FINALIZE] No local items to reward");
                 };
