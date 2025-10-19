@@ -2,10 +2,11 @@ import Text "mo:core/Text";
 import Nat "mo:core/Nat";
 import Int "mo:core/Int";
 import Time "mo:core/Time";
-import Iter "mo:core/Iter";
 import Array "mo:core/Array";
 import App "mo:liminal/App";
 import HttpContext "mo:liminal/HttpContext";
+import Url "mo:url-kit@3";
+import Path "mo:url-kit@3/Path";
 import ProtectedRoutes "../nfc_protec_routes";
 import Scan "../utils/scan";
 import InvalidScan "../utils/invalid_scan";
@@ -21,68 +22,55 @@ module NFCMiddleware {
     // NFC Utility Functions
     // ========================================
 
-    // Extract NFC parameters from URL
-    public func extractNFCParams(url: Text) : {uid: Text; cmac: Text; ctr: Text} {
-        let queries = Iter.toArray(Text.split(url, #char '?'));
+    public func parseUrl(url : Text) : ?Url.Url {
+        switch (Url.fromText(url)) {
+            case (#ok(parsed)) ?parsed;
+            case (#err(_)) null;
+        }
+    };
 
+    public func extractNFCParams(url: Text) : {uid: Text; cmac: Text; ctr: Text} {
         var uid = "";
         var cmac = "";
         var ctr = "";
 
-        if (queries.size() >= 2) {
-            let params = Iter.toArray(Text.split(queries[1], #char '&'));
-
-            for (param in params.vals()) {
-                let keyValue = Iter.toArray(Text.split(param, #char '='));
-                if (keyValue.size() == 2) {
-                    switch (keyValue[0]) {
-                        case "uid" { uid := keyValue[1]; };
-                        case "cmac" { cmac := keyValue[1]; };
-                        case "ctr" { ctr := keyValue[1]; };
+        switch (parseUrl(url)) {
+            case (?parsed) {
+                for ((key, value) in parsed.queryParams.vals()) {
+                    switch (key) {
+                        case "uid" { uid := value; };
+                        case "cmac" { cmac := value; };
+                        case "ctr" { ctr := value; };
                         case _ {};
                     };
                 };
             };
+            case null {};
         };
 
-        {uid = uid; cmac = cmac; ctr = ctr}
+        { uid = uid; cmac = cmac; ctr = ctr }
     };
 
-    // Extract item ID from URL path - only works with pattern /stitch/#
     public func extractItemIdFromUrl(url: Text) : ?Nat {
-        // Split URL by '/' and look for "stitch" followed by a numeric ID
-        let parts = Iter.toArray(Text.split(url, #char '/'));
-
-        var i = 0;
-        let partsSize = parts.size();
-        while (i < partsSize) {
-            let part = parts[i];
-
-            // Check if this part is "stitch"
-            if (part == "stitch") {
-                // Check if next part exists and could be an ID
-                if (i + 1 < partsSize) {
-                    let potentialId = parts[i + 1];
-                    // Remove query string if present
-                    let idClean = Iter.toArray(Text.split(potentialId, #char '?'))[0];
-
-                    // Try to parse as number
-                    switch (Nat.fromText(idClean)) {
-                        case (?id) {
-                            // Found a valid numeric ID after "stitch"
-                            return ?id;
-                        };
-                        case null {
-                            // Not a number after "stitch"
-                            return null;
+        switch (parseUrl(url)) {
+            case (?parsed) {
+                let segments = parsed.path;
+                var i = 0;
+                while (i < segments.size()) {
+                    if (segments[i] == "stitch") {
+                        if (i + 1 < segments.size()) {
+                            switch (Nat.fromText(segments[i + 1])) {
+                                case (?id) { return ?id; };
+                                case null { return null; };
+                            };
                         };
                     };
+                    i += 1;
                 };
+                null;
             };
-            i += 1;
-        };
-
-        null
+            case null null;
+        }
     };
 
     // Generate HTML response for NFC scan result
