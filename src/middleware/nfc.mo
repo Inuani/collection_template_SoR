@@ -16,7 +16,8 @@ import PendingSessions "../utils/pending_sessions";
 
 module NFCMiddleware {
 
-    let tokenTtlSeconds : Nat = 180;
+    let sessionTtlSeconds : Nat = 300;
+    let meetingWindowSeconds : Nat = 60;
 
     // ========================================
     // NFC Utility Functions
@@ -179,64 +180,78 @@ module NFCMiddleware {
             };
             handleUpdate = func(context : HttpContext.HttpContext, next : App.NextAsync) : async* App.HttpResponse {
                 let url = context.request.url;
-                if (protected_routes_storage.isProtectedRoute(url))
-                {
-                    let routes_array = protected_routes_storage.listProtectedRoutes();
-                    for ((path, protection) in routes_array.vals())
-                    {
-                        if (Text.contains(url, #text path))
-                        {
-                            // Extract item ID from URL if this is an item route
-                            let itemIdOpt = extractItemIdFromUrl(url);
 
-                            switch (itemIdOpt) {
-                                case (?itemId) {
-                                    // This is an item route - verify NFC first
-                                    let routeCmacs = protected_routes_storage.getRouteCmacs(path);
-                                    let scanCount = protection.scan_count_;
+                if (not protected_routes_storage.isProtectedRoute(url)) {
+                    return await* next();
+                };
 
-                                    // Verify NFC signature
-                                    let counter = Scan.scan(routeCmacs, url, scanCount);
-                                    if (counter == 0) {
-                                        // Invalid NFC scan
-                                        return {
-                                            statusCode = 403;
-                                            headers = [("Content-Type", "text/html")];
-                                            body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage(themeManager));
-                                            streamingStrategy = null;
-                                        };
-                                    };
+                switch (parseUrl(url)) {
+                    case (?_) {};
+                    case null {
+                        return {
+                            statusCode = 400;
+                            headers = [("Content-Type", "text/html")];
+                            body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage(themeManager));
+                            streamingStrategy = null;
+                        };
+                    };
+                };
 
-                                    // Update scan count
-                                    ignore protected_routes_storage.verifyRouteAccess(path, url);
+                let routes_array = protected_routes_storage.listProtectedRoutes();
+                let countdownNanos = Int.fromNat(meetingWindowSeconds) * 1_000_000_000;
 
-                                    let identityStateOpt = StitchingToken.fromIdentity(context.getIdentity());
-                                    let baseState = switch (identityStateOpt) {
-                                        case (?state) state;
-                                        case null StitchingToken.empty();
-                                    };
-                                    let itemsInSession = baseState.items;
+                label routeLoop for ((path, protection) in routes_array.vals()) {
+                    if (not Text.contains(url, #text path)) {
+                        continue routeLoop;
+                    };
 
-                                    // Check if item already in current stitching state
-                                    let alreadyScanned = Array.find<StitchingToken.SessionItem>(
-                                        itemsInSession,
-                                        func(entry) = entry.itemId == itemId and (entry.canisterId == "" or entry.canisterId == canisterId)
-                                    );
+                    let itemIdOpt = extractItemIdFromUrl(url);
 
-                                    switch (alreadyScanned) {
-                                        case (?_) {
-                                            let redirectUrl = if (itemsInSession.size() >= 2) {
-                                                "/stitching/active?items=" # StitchingToken.itemsToText(itemsInSession)
-                                            } else {
-                                                "/stitching/waiting?item=" # StitchingToken.itemsToText([{
-                                                    canisterId = canisterId;
-                                                    itemId = itemId;
-                                                }])
-                                            };
+                    switch (itemIdOpt) {
+                        case (?itemId) {
+                            let routeCmacs = protection.cmacs_;
+                            let scanCount = protection.scan_count_;
+                            let counter = Scan.scan(routeCmacs, url, scanCount);
+                            if (counter == 0) {
+                                return {
+                                    statusCode = 403;
+                                    headers = [("Content-Type", "text/html")];
+                                    body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage(themeManager));
+                                    streamingStrategy = null;
+                                };
+                            };
+
+                            ignore protected_routes_storage.verifyRouteAccess(path, url);
+
+                            let sessionItem : StitchingToken.SessionItem = {
+                                canisterId = canisterId;
+                                itemId = itemId;
+                            };
+
+                            let identityStateOpt = StitchingToken.fromIdentity(context.getIdentity());
+                            let sessionIdFromToken = switch (identityStateOpt) {
+                                case (?state) state.sessionId;
+                                case null null;
+                            };
+
+                            let now = Time.now();
+
+                            switch (sessionIdFromToken) {
+                                case (?existingSessionId) {
+                                    switch (pendingSessions.get(existingSessionId, now)) {
+                                        case null {
+                                            let newSessionId = await StitchingToken.generateSessionId();
+                                            pendingSessions.put(newSessionId, {
+                                                items = [sessionItem];
+                                                startTime = now;
+                                                expiresAt = now + countdownNanos;
+                                                ttlSeconds = sessionTtlSeconds;
+                                                createdAt = now;
+                                            });
                                             let html = generateScanRedirectPage(
-                                                redirectUrl,
-                                                "Cet objet a déjà rejoint la session.",
-                                                true
+                                                "/stitching/pending?session=" # newSessionId,
+                                                "Scan réussi ! Redirection…",
+                                                false
                                             );
                                             return {
                                                 statusCode = 200;
@@ -245,34 +260,38 @@ module NFCMiddleware {
                                                 streamingStrategy = null;
                                             };
                                         };
-                                        case null {
-                                            // Build updated stitching state
-                                            let now = Time.now();
-                                            let updatedItems = Array.concat(
-                                                itemsInSession,
-                                                [{
-                                                    canisterId = canisterId;
-                                                    itemId = itemId;
-                                                }]
+                                        case (?session) {
+                                            let alreadyScanned = Array.find<StitchingToken.SessionItem>(
+                                                session.items,
+                                                func(entry) = entry.canisterId == sessionItem.canisterId and entry.itemId == sessionItem.itemId
                                             );
 
-                                            // Generate session identifier
-                                            let sessionId = await StitchingToken.generateSessionId();
-                                            let startTime = now;
+                                            let updatedItems = switch (alreadyScanned) {
+                                                case (?_) session.items;
+                                                case null Array.concat(session.items, [sessionItem]);
+                                            };
 
-                                            pendingSessions.put(sessionId, {
+                                            let updatedSession : PendingSessions.Session = {
                                                 items = updatedItems;
-                                                startTime = startTime;
-                                                ttlSeconds = tokenTtlSeconds;
-                                                createdAt = now;
-                                            });
+                                                startTime = now;
+                                                expiresAt = now + countdownNanos;
+                                                ttlSeconds = session.ttlSeconds;
+                                                createdAt = session.createdAt;
+                                            };
+                                            pendingSessions.put(existingSessionId, updatedSession);
 
-                                            let html = generateScanRedirectPage(
-                                                "/stitching/pending?session=" # sessionId,
-                                                "Scan réussi ! Redirection…",
-                                                false
-                                            );
-
+                                            let redirectUrl = if (updatedItems.size() >= 2) {
+                                                "/stitching/active"
+                                            } else {
+                                                "/stitching/waiting"
+                                            };
+                                            let isDuplicate = switch (alreadyScanned) { case (?_) true; case null false; };
+                                            let message = if (isDuplicate) {
+                                                "Cet objet a déjà rejoint la session."
+                                            } else {
+                                                "Scan réussi ! Redirection…"
+                                            };
+                                            let html = generateScanRedirectPage(redirectUrl, message, isDuplicate);
                                             return {
                                                 statusCode = 200;
                                                 headers = [("Content-Type", "text/html")];
@@ -283,22 +302,43 @@ module NFCMiddleware {
                                     };
                                 };
                                 case null {
-                                    // Not an item route - use standard verification
-                                    if (not protected_routes_storage.verifyRouteAccess(path, url))
-                                    {
-                                        return
-                                        {
-                                            statusCode = 403;
-                                            headers = [("Content-Type", "text/html")];
-                                            body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage(themeManager));
-                                            streamingStrategy = null;
-                                        };
+                                    let newSessionId = await StitchingToken.generateSessionId();
+                                    pendingSessions.put(newSessionId, {
+                                        items = [sessionItem];
+                                        startTime = now;
+                                        expiresAt = now + countdownNanos;
+                                        ttlSeconds = sessionTtlSeconds;
+                                        createdAt = now;
+                                    });
+                                    let html = generateScanRedirectPage(
+                                        "/stitching/pending?session=" # newSessionId,
+                                        "Scan réussi ! Redirection…",
+                                        false
+                                    );
+                                    return {
+                                        statusCode = 200;
+                                        headers = [("Content-Type", "text/html")];
+                                        body = ?Text.encodeUtf8(html);
+                                        streamingStrategy = null;
                                     };
                                 };
                             };
                         };
+                        case null {
+                            if (not protected_routes_storage.verifyRouteAccess(path, url))
+                            {
+                                return {
+                                    statusCode = 403;
+                                    headers = [("Content-Type", "text/html")];
+                                    body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage(themeManager));
+                                    streamingStrategy = null;
+                                };
+                            };
+                            return await* next();
+                        };
                     };
                 };
+
                 await* next();
             };
         };

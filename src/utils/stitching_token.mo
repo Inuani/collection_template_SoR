@@ -18,8 +18,6 @@ module {
     };
 
     public type StitchingState = {
-        items : [SessionItem];
-        startTime : ?Int;
         sessionId : ?Text;
         issuedAt : ?Int;
         expiresAt : ?Int;
@@ -29,8 +27,6 @@ module {
         issuer : Text;
         subject : Text;
         sessionId : Text;
-        items : [SessionItem];
-        startTime : Int;
         now : Int;
         ttlSeconds : Nat;
     };
@@ -39,8 +35,6 @@ module {
         issuer : Text;
         subject : Text;
         sessionId : Text;
-        items : [SessionItem];
-        startTime : Int;
         issuedAt : Int;
         expiresAt : Int;
     };
@@ -48,12 +42,9 @@ module {
     public let defaultIssuer : Text = "collection_d_evorev";
     public let defaultSubjectPrefix : Text = "stitching-session";
     public let tokenCookieName : Text = "stitching_jwt";
-    public let stitchingTimeoutNanos : Int = 60_000_000_000;
 
     public func empty() : StitchingState {
         {
-            items = [];
-            startTime = null;
             sessionId = null;
             issuedAt = null;
             expiresAt = null;
@@ -108,19 +99,15 @@ module {
     };
 
     public func parseJWT(token : JWT.Token) : ?StitchingState {
-        let items = parseItems(JWT.getPayloadValue(token, "items"));
-        let startTime = parseInt(JWT.getPayloadValue(token, "start_time"));
         let sessionId = parseText(JWT.getPayloadValue(token, "session_id"));
         let issuedAt = parseInt(JWT.getPayloadValue(token, "iat"));
         let expiresAt = parseInt(JWT.getPayloadValue(token, "exp"));
 
-        if (items == null and startTime == null and sessionId == null) {
+        if (sessionId == null and issuedAt == null and expiresAt == null) {
             return null;
         };
 
         ?{
-            items = switch (items) { case null { [] }; case (?value) value };
-            startTime = startTime;
             sessionId = sessionId;
             issuedAt = issuedAt;
             expiresAt = expiresAt;
@@ -142,32 +129,18 @@ module {
             issuer = input.issuer;
             subject = input.subject;
             sessionId = input.sessionId;
-            items = input.items;
-            startTime = input.startTime;
             issuedAt = issuedAtSeconds;
             expiresAt = expiresAtSeconds;
         };
     };
 
     public func toUnsignedToken(claims : StitchingClaims) : JWT.UnsignedToken {
-        let itemsJson = Array.map<SessionItem, Json.Json>(
-            claims.items,
-            func(item : SessionItem) : Json.Json {
-                #object_([
-                    ("canister_id", #string(item.canisterId)),
-                    ("item_id", #number(#int(Int.fromNat(item.itemId)))),
-                ]);
-            },
-        );
-
         let payloadBase : [(Text, Json.Json)] = [
             ("iss", #string(claims.issuer)),
             ("sub", #string(claims.subject)),
             ("session_id", #string(claims.sessionId)),
             ("iat", #number(#int(claims.issuedAt))),
             ("exp", #number(#int(claims.expiresAt))),
-            ("items", #array(itemsJson)),
-            ("start_time", #string(Int.toText(claims.startTime))),
         ];
 
         {
@@ -176,73 +149,6 @@ module {
                 ("typ", #string("JWT")),
             ];
             payload = payloadBase;
-        };
-    };
-
-    func parseItems(valueOpt : ?Json.Json) : ?[SessionItem] {
-        switch (valueOpt) {
-            case null { null };
-            case (?value) {
-                switch (value) {
-                    case (#array(itemsJson)) {
-                        var parsed : [SessionItem] = [];
-                        for (entry in itemsJson.vals()) {
-                            switch (parseSessionItem(entry)) {
-                                case (?sessionItem) {
-                                    parsed := Array.concat(parsed, [sessionItem]);
-                                };
-                                case null {};
-                            };
-                        };
-                        ?parsed;
-                    };
-                    case (_) { null };
-                };
-            };
-        }
-    };
-
-    func parseSessionItem(value : Json.Json) : ?SessionItem {
-        switch (value) {
-            case (#object_(fields)) {
-                var canisterId : ?Text = null;
-                var itemId : ?Nat = null;
-                for ((key, val) in fields.vals()) {
-                    switch (key) {
-                        case "canister_id" {
-                            canisterId := parseText(?val);
-                        };
-                        case "item_id" {
-                            itemId := parseNat(val);
-                        };
-                        case _ {};
-                    };
-                };
-                switch (canisterId, itemId) {
-                    case (?cid, ?iid) {
-                        ?{
-                            canisterId = cid;
-                            itemId = iid;
-                        };
-                    };
-                    case _ { null };
-                };
-            };
-            case (#number(_)) {
-                switch (parseNat(value)) {
-                    case (?iid) {
-                        ?{
-                            canisterId = "";
-                            itemId = iid;
-                        };
-                    };
-                    case null null;
-                };
-            };
-            case (#string(text)) {
-                decodeSessionItem(text);
-            };
-            case _ { null };
         };
     };
 

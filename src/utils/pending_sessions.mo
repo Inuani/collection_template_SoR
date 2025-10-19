@@ -9,29 +9,39 @@ module {
     public type Session = {
         items : [StitchingToken.SessionItem];
         startTime : Int;
+        expiresAt : Int;
         ttlSeconds : Nat;
         createdAt : Int;
     };
 
     public class PendingSessions() {
-        let store = HashMap.HashMap<Text, Session>(16, TextBase.equal, TextBase.hash);
+        let store = HashMap.HashMap<Text, Session>(32, TextBase.equal, TextBase.hash);
 
         public func put(id : Text, session : Session) {
             store.put(id, session);
         };
 
-        public func take(id : Text, now : Int) : ?Session {
-            switch (store.remove(id)) {
+        public func get(id : Text, now : Int) : ?Session {
+            switch (store.get(id)) {
                 case null { null };
                 case (?session) {
-                    let ttlNanos = Int.fromNat(session.ttlSeconds) * 1_000_000_000;
-                    if (now - session.createdAt > ttlNanos) {
+                    if (isExpired(session, now)) {
+                        ignore store.remove(id);
                         null;
                     } else {
                         ?session;
                     };
                 };
             }
+        };
+
+        public func remove(id : Text) {
+            ignore store.remove(id);
+        };
+
+        private func isExpired(session : Session, now : Int) : Bool {
+            let ttlNanos = Int.fromNat(session.ttlSeconds) * 1_000_000_000;
+            now >= session.expiresAt or now - session.createdAt > ttlNanos;
         };
     };
 };

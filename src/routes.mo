@@ -63,7 +63,7 @@ module Routes {
         ],
 
         // Stitching routes (extracted to separate module)
-        StitchingRoutes.getStitchingRoutes(collection, themeManager, pendingSessions),
+        StitchingRoutes.getStitchingRoutes(collection, themeManager, pendingSessions, canisterId),
 
         [
 
