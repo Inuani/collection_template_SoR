@@ -113,8 +113,9 @@ module StitchingRoutes {
                 if (hasExpired(session, now) and session.items.size() >= 2) {
                     Debug.print("[Waiting Page] AUTO-FINALIZING MEETING");
                     if (localItemIds.size() > 0) {
-                        let stitchingId = "stitching_" # Int.toText(Time.now());
-                        ignore collection.recordStitching(localItemIds, currentCanisterId, stitchingId, 10, session.items);
+                        let timestamp = now;
+                        let stitchingId = "stitching_" # Int.toText(timestamp);
+                        ignore collection.recordStitching(localItemIds, currentCanisterId, stitchingId, 10, session.items, timestamp);
                     };
                     pendingSessions.remove(sessionId);
                     let itemsText = StitchingToken.itemsToText(session.items);
@@ -203,8 +204,9 @@ module StitchingRoutes {
                     Debug.print("[Active Page] AUTO-FINALIZING MEETING");
                     let localItemIds = sessionItemsToLocalItemIds(session.items, currentCanisterId);
                     if (localItemIds.size() > 0) {
-                        let stitchingId = "stitching_" # Int.toText(Time.now());
-                        ignore collection.recordStitching(localItemIds, currentCanisterId, stitchingId, 10, session.items);
+                        let timestamp = now;
+                        let stitchingId = "stitching_" # Int.toText(timestamp);
+                        ignore collection.recordStitching(localItemIds, currentCanisterId, stitchingId, 10, session.items, timestamp);
                     };
                     pendingSessions.remove(sessionId);
                     let itemsText = StitchingToken.itemsToText(session.items);
@@ -276,8 +278,9 @@ module StitchingRoutes {
 
                 let localItemIds = sessionItemsToLocalItemIds(session.items, currentCanisterId);
                 if (localItemIds.size() > 0) {
-                    let stitchingId = "stitching_" # Int.toText(Time.now());
-                    ignore collection.recordStitching(localItemIds, currentCanisterId, stitchingId, 10, session.items);
+                    let timestamp = now;
+                    let stitchingId = "stitching_" # Int.toText(timestamp);
+                    ignore collection.recordStitching(localItemIds, currentCanisterId, stitchingId, 10, session.items, timestamp);
                 } else {
                     Debug.print("[FINALIZE] No local items to reward");
                 };

@@ -3,7 +3,6 @@ import Text "mo:core/Text";
 import Nat "mo:core/Nat";
 import Collection "collection";
 import Theme "utils/theme";
-import Int "mo:core/Int";
 
 module {
     public func generateCollectionPage(
@@ -194,13 +193,16 @@ module {
 
         var html = "";
         for (record in history.vals()) {
+            let timestampMs : Int = record.date / 1_000_000;
+            let timestampText = Int.toText(timestampMs);
             let partners = formatPartners(record.partner_items);
-            html #= "<div class=\"stitching-record\">\n"
-                # "    <div class=\"stitching-date\">Stitching ID: " # record.stitching_id # "</div>\n"
+            html #= "<div class=\"stitching-record\" data-timestamp=\"" # timestampText # "\">\n"
+                # "    <div class=\"stitching-date\">" # record.stitching_id # " · <span class=\"stitching-date-value\">" # timestampText # "</span></div>\n"
                 # "    <div class=\"stitching-partners\">" # partners # "</div>\n"
                 # "    <div class=\"stitching-tokens\">+" # Nat.toText(record.tokens_earned) # " tokens</div>\n"
                 # "</div>";
         };
+        html #= "<script>(function(){const nodes=document.querySelectorAll('.stitching-record[data-timestamp] .stitching-date-value');for(const node of nodes){const wrapper=node.closest('.stitching-record');if(!wrapper) continue;const value=Number(wrapper.getAttribute('data-timestamp'));if(!Number.isFinite(value)) continue;node.textContent=new Date(value).toLocaleString();}})();</script>";
         html
     };
 

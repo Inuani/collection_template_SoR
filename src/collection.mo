@@ -42,7 +42,7 @@ module {
     public func init() : State = {
         var items = [];
         var nextId = 0;
-        var collectionName = "Collection d'Évorev";
+        var collectionName = "Une Collection d'Évorev";
         var collectionDescription = "Une collection parmi d'autre ...";
     };
 
@@ -204,9 +204,9 @@ module {
             currentCanisterId: Text,
             stitchingId: Text,
             tokensEarned: Nat,
-            participants: [StitchingToken.SessionItem]
+            participants: [StitchingToken.SessionItem],
+            timestamp: Int
         ) : Result.Result<(), Text> {
-            let timestamp = Time.now();
 
             // Update each item with the stitching record
             for (itemId in itemIds.vals()) {
