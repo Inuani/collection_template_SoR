@@ -247,46 +247,107 @@ module {
     };
 
     func encodeSessionItem(item : SessionItem) : Text {
-        item.canisterId # "_" # Nat.toText(item.itemId);
+        let jsonValue : Json.Json = #object_([
+            ("cid", #string(item.canisterId)),
+            ("id", #number(#int(Int.fromNat(item.itemId))))
+        ]);
+        let jsonText = Json.stringify(jsonValue, null);
+        let jsonBytes = Blob.toArray(Text.encodeUtf8(jsonText));
+        BaseX.toBase64(jsonBytes.vals(), #url({ includePadding = false }));
     };
 
     func decodeSessionItem(value : Text) : ?SessionItem {
-        // Try legacy format with colon first for backward compatibility
-        let legacyParts = Iter.toArray(Text.split(value, #char ':'));
-        switch (legacyParts.size()) {
-            case 2 {
-                switch (Nat.fromText(legacyParts[1])) {
-                    case (?itemId) {
-                        return ?{
-                            canisterId = legacyParts[0];
-                            itemId = itemId;
-                        };
-                    };
-                    case null {};
+        let decodedFromBase64 : ?SessionItem = switch (BaseX.fromBase64(value)) {
+            case (#ok(bytes)) {
+                let jsonTextOpt = Text.decodeUtf8(Blob.fromArray(bytes));
+                switch (jsonTextOpt) {
+                    case (?jsonText) parseSessionItemJson(jsonText);
+                    case null null;
                 };
             };
-            case 1 {
-                switch (Nat.fromText(legacyParts[0])) {
-                    case (?itemId) {
-                        return ?{
-                            canisterId = "";
-                            itemId = itemId;
-                        };
-                    };
-                    case null {};
-                };
-            };
-            case _ {};
+            case (#err(_)) null;
         };
 
-        let parts = Iter.toArray(Text.split(value, #char '_'));
-        if (parts.size() != 2) {
-            return null;
+        switch (decodedFromBase64) {
+            case (?sessionItem) return ?sessionItem;
+            case null {};
         };
-        switch (Nat.fromText(parts[1])) {
+
+        decodeSessionItemLegacy(value);
+    };
+
+    func parseSessionItemJson(jsonText : Text) : ?SessionItem {
+        switch (Json.parse(jsonText)) {
+            case (#ok(#object_(fields))) {
+                var cid : ?Text = null;
+                var itemId : ?Nat = null;
+
+                for ((key, value) in fields.vals()) {
+                    if (key == "cid") {
+                        switch (parseText(?value)) {
+                            case (?text) { cid := ?text; };
+                            case null {};
+                        };
+                    } else if (key == "id") {
+                        switch (parseNat(value)) {
+                            case (?natVal) { itemId := ?natVal; };
+                            case null {};
+                        };
+                    };
+                };
+
+                switch (cid, itemId) {
+                    case (?foundCid, ?foundItemId) {
+                        ?{
+                            canisterId = foundCid;
+                            itemId = foundItemId;
+                        };
+                    };
+                    case (?_, null) {
+                        null;
+                    };
+                    case (null, ?foundItemId) {
+                        ?{
+                            canisterId = "";
+                            itemId = foundItemId;
+                        };
+                    };
+                    case (null, null) null;
+                };
+            };
+            case (_) null;
+        };
+    };
+
+    func decodeSessionItemLegacy(value : Text) : ?SessionItem {
+        func parseWithSeparator(sep : Char) : ?SessionItem {
+            let parts = Iter.toArray(Text.split(value, #char sep));
+            if (parts.size() != 2) { return null; };
+            switch (Nat.fromText(parts[1])) {
+                case (?itemId) {
+                    ?{
+                        canisterId = parts[0];
+                        itemId = itemId;
+                    };
+                };
+                case null null;
+            };
+        };
+
+        switch (parseWithSeparator('_')) {
+            case (?result) return ?result;
+            case null {};
+        };
+
+        switch (parseWithSeparator(':')) {
+            case (?result) return ?result;
+            case null {};
+        };
+
+        switch (Nat.fromText(value)) {
             case (?itemId) {
                 ?{
-                    canisterId = parts[0];
+                    canisterId = "";
                     itemId = itemId;
                 };
             };
