@@ -8,6 +8,7 @@ import Array "mo:core/Array";
 import Nat "mo:core/Nat";
 import Nat8 "mo:core/Nat8";
 import Result "mo:core/Result";
+import NatBase "mo:base/Nat";
 import NatX "mo:xtended-numbers@2/NatX";
 import JWT "mo:jwt@2";
 import Json "mo:json@1";
@@ -178,7 +179,7 @@ module {
                 if (value.size() == 32) { return value };
                 return Array.tabulate<Nat8>(32, func(i) = value[value.size() - 32 + i]);
             };
-            let padding = 32 - value.size();
+            let padding = NatBase.sub(32, value.size());
             Array.tabulate<Nat8>(
                 32,
                 func(i) = if (i < padding) 0 else value[i - padding],

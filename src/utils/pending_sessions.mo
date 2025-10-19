@@ -3,10 +3,11 @@ import Text "mo:core/Text";
 import TextBase "mo:base/Text";
 import Int "mo:core/Int";
 import Nat "mo:core/Nat";
+import StitchingToken "stitching_token";
 
 module {
     public type Session = {
-        items : [Nat];
+        items : [StitchingToken.SessionItem];
         startTime : Int;
         ttlSeconds : Nat;
         createdAt : Int;

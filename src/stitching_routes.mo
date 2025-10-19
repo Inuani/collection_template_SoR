@@ -6,7 +6,6 @@ import Nat "mo:core/Nat";
 import Int "mo:core/Int";
 import Time "mo:core/Time";
 import Array "mo:core/Array";
-import Iter "mo:core/Iter";
 import Debug "mo:core/Debug";
 import Collection "collection";
 import Theme "utils/theme";
@@ -41,6 +40,13 @@ module StitchingRoutes {
         (
             "Set-Cookie",
             StitchingToken.tokenCookieName # "=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+        );
+    };
+
+    func sessionItemsToItemIds(items: [StitchingToken.SessionItem]) : [Nat] {
+        Array.map<StitchingToken.SessionItem, Nat>(
+            items,
+            func(entry) = entry.itemId
         );
     };
 
@@ -91,6 +97,7 @@ module StitchingRoutes {
                 };
 
                 Debug.print("[Waiting Page] Items in session: " # Nat.toText(itemsInSession.size()));
+                let itemIds = sessionItemsToItemIds(itemsInSession);
 
                 let now = Time.now();
                 let stitchingExpired = hasExpired(state, now);
@@ -112,7 +119,7 @@ module StitchingRoutes {
                     let stitchingId = "stitching_" # Int.toText(Time.now());
 
                     // Record the stitching (awards tokens AND updates history)
-                    ignore collection.recordStitching(itemsInSession, stitchingId, 10);
+                    ignore collection.recordStitching(itemIds, stitchingId, 10);
 
                     let itemsText = StitchingToken.itemsToText(itemsInSession);
 
@@ -128,7 +135,7 @@ module StitchingRoutes {
                     };
                 };
 
-                let firstItemId = itemsInSession[0];
+                let firstItemId = itemIds[0];
                 switch (collection.getItem(firstItemId)) {
                     case null {
                         let html = "<html><body><h1>Error</h1><p>Item not found.</p></body></html>";
@@ -138,7 +145,7 @@ module StitchingRoutes {
                         // Get stitching start time from session to pass to frontend
                         let stitchingStartTime = getStartTimeText(state);
 
-                        let html = Stitching.generateWaitingPage(item, itemsInSession, stitchingStartTime, themeManager);
+                        let html = Stitching.generateWaitingPage(item, itemIds, stitchingStartTime, themeManager);
                         ctx.buildResponse(#ok, #html(html))
                     };
                 }
@@ -173,13 +180,16 @@ module StitchingRoutes {
                 };
 
                 if (itemsInSession.size() < 2) {
+                    let redirectParam = StitchingToken.itemsToText([itemsInSession[0]]);
                     return {
                         statusCode = 303;
-                        headers = [("Location", "/stitching/waiting?item=" # Nat.toText(itemsInSession[0]))];
+                        headers = [("Location", "/stitching/waiting?item=" # redirectParam)];
                         body = null;
                         streamingStrategy = null;
                     };
                 };
+
+                let itemIds = sessionItemsToItemIds(itemsInSession);
 
                 let now = Time.now();
                 let stitchingExpired = hasExpired(state, now);
@@ -201,7 +211,7 @@ module StitchingRoutes {
                     let stitchingId = "stitching_" # Int.toText(Time.now());
 
                     // Record the stitching (awards tokens AND updates history)
-                    ignore collection.recordStitching(itemsInSession, stitchingId, 10);
+                    ignore collection.recordStitching(itemIds, stitchingId, 10);
 
                     let itemsText = StitchingToken.itemsToText(itemsInSession);
 
@@ -221,7 +231,7 @@ module StitchingRoutes {
                 // Get stitching start time from session to pass to frontend
                 let stitchingStartTime = getStartTimeText(state);
 
-                let html = Stitching.generateActiveSessionPage(itemsInSession, allItems, stitchingStartTime, themeManager);
+                let html = Stitching.generateActiveSessionPage(itemIds, allItems, stitchingStartTime, themeManager);
                 ctx.buildResponse(#ok, #html(html))
             }),
 
@@ -255,6 +265,7 @@ module StitchingRoutes {
                 };
 
                 Debug.print("[FINALIZE] Items count: " # Nat.toText(itemsInSession.size()));
+                let itemIds = sessionItemsToItemIds(itemsInSession);
 
                 // 3. Check timer for auto-finalization (skip for manual)
                 if (isManual == null) {
@@ -297,7 +308,7 @@ module StitchingRoutes {
                 let stitchingId = "stitching_" # Int.toText(Time.now());
 
                 // Record the stitching (awards tokens AND updates history)
-                ignore collection.recordStitching(itemsInSession, stitchingId, 10);
+                ignore collection.recordStitching(itemIds, stitchingId, 10);
 
                 Debug.print("[FINALIZE] Tokens awarded and history recorded ✓");
 
@@ -345,7 +356,7 @@ module StitchingRoutes {
                         let redirectUrl = if (pending.items.size() == 0) {
                             "/stitching/error"
                         } else if (pending.items.size() == 1) {
-                            "/stitching/waiting?item=" # Nat.toText(pending.items[0])
+                            "/stitching/waiting?item=" # StitchingToken.itemsToText([pending.items[0]])
                         } else {
                             "/stitching/active?items=" # StitchingToken.itemsToText(pending.items)
                         };
@@ -372,16 +383,9 @@ module StitchingRoutes {
                     case null "";
                 };
 
-                let rawParts = Iter.toArray(Text.split(itemsText, #char ','));
-                var itemIds : [Nat] = [];
-                for (part in rawParts.vals()) {
-                    switch (Nat.fromText(part)) {
-                        case (?id) { itemIds := Array.concat(itemIds, [id]); };
-                        case null {};
-                    };
-                };
+                let sessionItems = StitchingToken.itemsFromText(itemsText);
 
-                if (itemIds.size() == 0) {
+                if (sessionItems.size() == 0) {
                     let html = "<html><body><h1>No Stitching Data</h1><p>We couldn't find stitching information. Please rescan the NFC tags.</p></body></html>";
                     return {
                         statusCode = 200;
@@ -393,6 +397,8 @@ module StitchingRoutes {
                         streamingStrategy = null;
                     };
                 };
+
+                let itemIds = sessionItemsToItemIds(sessionItems);
 
                 let allItems = collection.getAllItems();
                 let html = Stitching.generateSessionSuccessPage(itemIds, allItems, themeManager);

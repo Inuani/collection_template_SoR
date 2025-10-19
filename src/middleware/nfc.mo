@@ -178,7 +178,8 @@ module NFCMiddleware {
     public func createNFCProtectionMiddleware(
         protected_routes_storage: ProtectedRoutes.RoutesStorage,
         pendingSessions: PendingSessions.PendingSessions,
-        themeManager: Theme.ThemeManager
+        themeManager: Theme.ThemeManager,
+        canisterId: Text
     ) : App.Middleware {
         {
             name = "NFC Protection with Session-Based Stitchings";
@@ -229,14 +230,20 @@ module NFCMiddleware {
                                     let itemsInSession = baseState.items;
 
                                     // Check if item already in current stitching state
-                                    let alreadyScanned = Array.find<Nat>(itemsInSession, func(id) = id == itemId);
+                                    let alreadyScanned = Array.find<StitchingToken.SessionItem>(
+                                        itemsInSession,
+                                        func(entry) = entry.itemId == itemId and (entry.canisterId == "" or entry.canisterId == canisterId)
+                                    );
 
                                     switch (alreadyScanned) {
                                         case (?_) {
                                             let redirectUrl = if (itemsInSession.size() >= 2) {
                                                 "/stitching/active?items=" # StitchingToken.itemsToText(itemsInSession)
                                             } else {
-                                                "/stitching/waiting?item=" # Nat.toText(itemId)
+                                                "/stitching/waiting?item=" # StitchingToken.itemsToText([{
+                                                    canisterId = canisterId;
+                                                    itemId = itemId;
+                                                }])
                                             };
                                             let html = generateScanRedirectPage(
                                                 redirectUrl,
@@ -253,7 +260,13 @@ module NFCMiddleware {
                                         case null {
                                             // Build updated stitching state
                                             let now = Time.now();
-                                            let updatedItems = Array.concat(itemsInSession, [itemId]);
+                                            let updatedItems = Array.concat(
+                                                itemsInSession,
+                                                [{
+                                                    canisterId = canisterId;
+                                                    itemId = itemId;
+                                                }]
+                                            );
 
                                             // Generate session identifier
                                             let sessionId = await StitchingToken.generateSessionId();

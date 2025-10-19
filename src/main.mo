@@ -26,6 +26,7 @@ import PendingSessions "utils/pending_sessions";
 shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     transient let canisterId = Principal.fromActor(self);
+    transient let canisterIdText = Principal.toText(canisterId);
     type ChunkId = Files.ChunkId;
 
     var assetStableData = HttpAssets.init_stable_store(canisterId, initializer);
@@ -74,8 +75,9 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                 validation = {
                     expiration = true;
                     notBefore = false;
-                    issuer = #one("bleu_travail_core");
+                    issuer = #one("collection_d_evorev");
                     signature = #key(jwtVerificationKey);
+                    // signature = #skip;
                     audience = #skip;
                 };
                 locations = [
@@ -83,10 +85,10 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                     #header("Authorization"),
                 ];
             }),
-            NFCMiddleware.createNFCProtectionMiddleware(protected_routes_storage, pendingSessions, themeManager),
+            NFCMiddleware.createNFCProtectionMiddleware(protected_routes_storage, pendingSessions, themeManager, canisterIdText),
             AssetsMiddleware.new(assetMiddlewareConfig),
             RouterMiddleware.new(Routes.routerConfig(
-                Principal.toText(canisterId),
+                canisterIdText,
                 fileService.getFileChunk,
                 collection,
                 themeManager,

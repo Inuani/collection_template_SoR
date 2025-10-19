@@ -2,6 +2,7 @@ import Nat "mo:core/Nat";
 import Int "mo:core/Int";
 import Float "mo:core/Float";
 import Array "mo:core/Array";
+import Iter "mo:core/Iter";
 import Text "mo:core/Text";
 import Json "mo:json@1";
 import JWT "mo:jwt@2";
@@ -11,8 +12,13 @@ import Blob "mo:core/Blob";
 import BaseX "mo:base-x-encoder";
 
 module {
+    public type SessionItem = {
+        canisterId : Text;
+        itemId : Nat;
+    };
+
     public type StitchingState = {
-        items : [Nat];
+        items : [SessionItem];
         startTime : ?Int;
         sessionId : ?Text;
         issuedAt : ?Int;
@@ -23,7 +29,7 @@ module {
         issuer : Text;
         subject : Text;
         sessionId : Text;
-        items : [Nat];
+        items : [SessionItem];
         startTime : Int;
         now : Int;
         ttlSeconds : Nat;
@@ -33,13 +39,13 @@ module {
         issuer : Text;
         subject : Text;
         sessionId : Text;
-        items : [Nat];
+        items : [SessionItem];
         startTime : Int;
         issuedAt : Int;
         expiresAt : Int;
     };
 
-    public let defaultIssuer : Text = "bleu_travail_core";
+    public let defaultIssuer : Text = "collection_d_evorev";
     public let defaultSubjectPrefix : Text = "stitching-session";
     public let tokenCookieName : Text = "stitching_jwt";
     public let stitchingTimeoutNanos : Int = 60_000_000_000;
@@ -54,7 +60,7 @@ module {
         }
     };
 
-    public func itemsToText(items : [Nat]) : Text {
+    public func itemsToText(items : [SessionItem]) : Text {
         if (items.size() == 0) {
             return "";
         };
@@ -67,9 +73,27 @@ module {
             } else {
                 text #= ",";
             };
-            text #= Nat.toText(item);
+            text #= encodeSessionItem(item);
         };
         text
+    };
+
+    public func itemsFromText(text : Text) : [SessionItem] {
+        if (text.size() == 0) {
+            return [];
+        };
+
+        let parts = Iter.toArray(Text.split(text, #char ','));
+        var parsed : [SessionItem] = [];
+        for (entry in parts.vals()) {
+            switch (decodeSessionItem(entry)) {
+                case (?value) {
+                    parsed := Array.concat(parsed, [value]);
+                };
+                case null {};
+            };
+        };
+        parsed
     };
 
     public func fromIdentity(identityOpt : ?Identity.Identity) : ?StitchingState {
@@ -126,11 +150,13 @@ module {
     };
 
     public func toUnsignedToken(claims : StitchingClaims) : JWT.UnsignedToken {
-        let itemsJson = Array.map<Nat, Json.Json>(
+        let itemsJson = Array.map<SessionItem, Json.Json>(
             claims.items,
-            func(id : Nat) : Json.Json {
-                let idInt = Int.fromNat(id);
-                #number(#int(idInt));
+            func(item : SessionItem) : Json.Json {
+                #object_([
+                    ("canister_id", #string(item.canisterId)),
+                    ("item_id", #number(#int(Int.fromNat(item.itemId)))),
+                ]);
             },
         );
 
@@ -153,16 +179,18 @@ module {
         };
     };
 
-    func parseItems(valueOpt : ?Json.Json) : ?[Nat] {
+    func parseItems(valueOpt : ?Json.Json) : ?[SessionItem] {
         switch (valueOpt) {
             case null { null };
             case (?value) {
                 switch (value) {
                     case (#array(itemsJson)) {
-                        var parsed : [Nat] = [];
+                        var parsed : [SessionItem] = [];
                         for (entry in itemsJson.vals()) {
-                            switch (parseNat(entry)) {
-                                case (?id) { parsed := Array.concat(parsed, [id]); };
+                            switch (parseSessionItem(entry)) {
+                                case (?sessionItem) {
+                                    parsed := Array.concat(parsed, [sessionItem]);
+                                };
                                 case null {};
                             };
                         };
@@ -172,6 +200,98 @@ module {
                 };
             };
         }
+    };
+
+    func parseSessionItem(value : Json.Json) : ?SessionItem {
+        switch (value) {
+            case (#object_(fields)) {
+                var canisterId : ?Text = null;
+                var itemId : ?Nat = null;
+                for ((key, val) in fields.vals()) {
+                    switch (key) {
+                        case "canister_id" {
+                            canisterId := parseText(?val);
+                        };
+                        case "item_id" {
+                            itemId := parseNat(val);
+                        };
+                        case _ {};
+                    };
+                };
+                switch (canisterId, itemId) {
+                    case (?cid, ?iid) {
+                        ?{
+                            canisterId = cid;
+                            itemId = iid;
+                        };
+                    };
+                    case _ { null };
+                };
+            };
+            case (#number(_)) {
+                switch (parseNat(value)) {
+                    case (?iid) {
+                        ?{
+                            canisterId = "";
+                            itemId = iid;
+                        };
+                    };
+                    case null null;
+                };
+            };
+            case (#string(text)) {
+                decodeSessionItem(text);
+            };
+            case _ { null };
+        };
+    };
+
+    func encodeSessionItem(item : SessionItem) : Text {
+        item.canisterId # "_" # Nat.toText(item.itemId);
+    };
+
+    func decodeSessionItem(value : Text) : ?SessionItem {
+        // Try legacy format with colon first for backward compatibility
+        let legacyParts = Iter.toArray(Text.split(value, #char ':'));
+        switch (legacyParts.size()) {
+            case 2 {
+                switch (Nat.fromText(legacyParts[1])) {
+                    case (?itemId) {
+                        return ?{
+                            canisterId = legacyParts[0];
+                            itemId = itemId;
+                        };
+                    };
+                    case null {};
+                };
+            };
+            case 1 {
+                switch (Nat.fromText(legacyParts[0])) {
+                    case (?itemId) {
+                        return ?{
+                            canisterId = "";
+                            itemId = itemId;
+                        };
+                    };
+                    case null {};
+                };
+            };
+            case _ {};
+        };
+
+        let parts = Iter.toArray(Text.split(value, #char '_'));
+        if (parts.size() != 2) {
+            return null;
+        };
+        switch (Nat.fromText(parts[1])) {
+            case (?itemId) {
+                ?{
+                    canisterId = parts[0];
+                    itemId = itemId;
+                };
+            };
+            case null null;
+        };
     };
 
     func parseNat(value : Json.Json) : ?Nat {
