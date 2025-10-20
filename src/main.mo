@@ -50,6 +50,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     let peerRegistryState = PeerRegistry.init();
     transient let peerRegistry = PeerRegistry.Registry(peerRegistryState);
+    ignore peerRegistry.upsertPeer(canisterIdText, JwtHelper.defaultPublicKeyHex);
 
     transient let fileService = FileService.make(file_storage);
     transient let collectionService = CollectionService.make(initializer, collection);
@@ -442,7 +443,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     // PEER REGISTRY MANAGEMENT (Admin Only)
     // ============================================
 
-    public shared ({ caller }) func upsertPeer(canisterIdText: Text, jwtVerificationKeyHex: Text) : async () {
+    public shared ({ caller }) func upsertPeer(canisterIdText: Text, jwtVerificationKeyHex: Text) : async Bool {
         assert (caller == initializer);
         peerRegistry.upsertPeer(canisterIdText, jwtVerificationKeyHex)
     };

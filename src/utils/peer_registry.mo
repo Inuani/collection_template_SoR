@@ -27,17 +27,23 @@ module {
             state.peers := Iter.toArray(Map.entries(peers));
         };
 
-        public func upsertPeer(canisterIdText : Text, jwtVerificationKeyHex : Text) {
-            Map.add(
-                peers,
-                Text.compare,
-                canisterIdText,
-                {
-                    canisterIdText;
-                    jwtVerificationKeyHex;
-                },
-            );
-            updateState();
+        public func upsertPeer(canisterIdText : Text, jwtVerificationKeyHex : Text) : Bool {
+            switch (Map.get(peers, Text.compare, canisterIdText)) {
+                case (?_) { false };
+                case null {
+                    Map.add(
+                        peers,
+                        Text.compare,
+                        canisterIdText,
+                        {
+                            canisterIdText;
+                            jwtVerificationKeyHex;
+                        },
+                    );
+                    updateState();
+                    true;
+                };
+            };
         };
 
         public func removePeer(canisterIdText : Text) : Bool {
