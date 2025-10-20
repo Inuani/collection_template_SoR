@@ -6,7 +6,6 @@ import Array "mo:core/Array";
 import App "mo:liminal/App";
 import HttpContext "mo:liminal/HttpContext";
 import Url "mo:url-kit@3";
-import Path "mo:url-kit@3/Path";
 import ProtectedRoutes "../nfc_protec_routes";
 import Scan "../utils/scan";
 import InvalidScan "../utils/invalid_scan";
@@ -241,12 +240,15 @@ module NFCMiddleware {
                                     switch (pendingSessions.get(existingSessionId, now)) {
                                         case null {
                                             let newSessionId = await StitchingToken.generateSessionId();
+                                            let newSessionNonce = await StitchingToken.generateSessionNonce();
                                             pendingSessions.put(newSessionId, {
                                                 items = [sessionItem];
                                                 startTime = now;
                                                 expiresAt = now + countdownNanos;
                                                 ttlSeconds = sessionTtlSeconds;
                                                 createdAt = now;
+                                                hostCanisterId = canisterId;
+                                                sessionNonce = newSessionNonce;
                                             });
                                             let html = generateScanRedirectPage(
                                                 "/stitching/pending?session=" # newSessionId,
@@ -277,6 +279,8 @@ module NFCMiddleware {
                                                 expiresAt = now + countdownNanos;
                                                 ttlSeconds = session.ttlSeconds;
                                                 createdAt = session.createdAt;
+                                                hostCanisterId = session.hostCanisterId;
+                                                sessionNonce = session.sessionNonce;
                                             };
                                             pendingSessions.put(existingSessionId, updatedSession);
 
@@ -303,12 +307,15 @@ module NFCMiddleware {
                                 };
                                 case null {
                                     let newSessionId = await StitchingToken.generateSessionId();
+                                    let newSessionNonce = await StitchingToken.generateSessionNonce();
                                     pendingSessions.put(newSessionId, {
                                         items = [sessionItem];
                                         startTime = now;
                                         expiresAt = now + countdownNanos;
                                         ttlSeconds = sessionTtlSeconds;
                                         createdAt = now;
+                                        hostCanisterId = canisterId;
+                                        sessionNonce = newSessionNonce;
                                     });
                                     let html = generateScanRedirectPage(
                                         "/stitching/pending?session=" # newSessionId,

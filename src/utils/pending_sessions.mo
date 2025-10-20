@@ -12,6 +12,8 @@ module {
         expiresAt : Int;
         ttlSeconds : Nat;
         createdAt : Int;
+        hostCanisterId : Text;
+        sessionNonce : Text;
     };
 
     public class PendingSessions() {

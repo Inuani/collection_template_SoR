@@ -350,6 +350,8 @@ module StitchingRoutes {
                         sessionId = sessionId;
                         now = now;
                         ttlSeconds = session.ttlSeconds;
+                        hostCanisterId = session.hostCanisterId;
+                        sessionNonce = session.sessionNonce;
                     });
                     let unsignedToken = StitchingToken.toUnsignedToken(claims);
                     let jwt = await JwtHelper.mintUnsignedToken(unsignedToken);

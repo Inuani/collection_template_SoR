@@ -21,6 +21,8 @@ module {
         sessionId : ?Text;
         issuedAt : ?Int;
         expiresAt : ?Int;
+        hostCanisterId : ?Text;
+        sessionNonce : ?Text;
     };
 
     public type ClaimInput = {
@@ -29,6 +31,8 @@ module {
         sessionId : Text;
         now : Int;
         ttlSeconds : Nat;
+        hostCanisterId : Text;
+        sessionNonce : Text;
     };
 
     public type StitchingClaims = {
@@ -37,6 +41,8 @@ module {
         sessionId : Text;
         issuedAt : Int;
         expiresAt : Int;
+        hostCanisterId : Text;
+        sessionNonce : Text;
     };
 
     public let defaultIssuer : Text = "collection_d_evorev";
@@ -48,6 +54,8 @@ module {
             sessionId = null;
             issuedAt = null;
             expiresAt = null;
+            hostCanisterId = null;
+            sessionNonce = null;
         }
     };
 
@@ -102,6 +110,8 @@ module {
         let sessionId = parseText(JWT.getPayloadValue(token, "session_id"));
         let issuedAt = parseInt(JWT.getPayloadValue(token, "iat"));
         let expiresAt = parseInt(JWT.getPayloadValue(token, "exp"));
+        let hostCanisterId = parseText(JWT.getPayloadValue(token, "host_canister_id"));
+        let sessionNonce = parseText(JWT.getPayloadValue(token, "session_nonce"));
 
         if (sessionId == null and issuedAt == null and expiresAt == null) {
             return null;
@@ -111,13 +121,23 @@ module {
             sessionId = sessionId;
             issuedAt = issuedAt;
             expiresAt = expiresAt;
+            hostCanisterId = hostCanisterId;
+            sessionNonce = sessionNonce;
         };
     };
 
-    public func generateSessionId() : async Text {
+    private func randomHex() : async Text {
         let entropy = await Random.blob();
         let bytes = Blob.toArray(entropy);
         BaseX.toHex(bytes.vals(), { isUpper = false; prefix = #none });
+    };
+
+    public func generateSessionId() : async Text {
+        await randomHex();
+    };
+
+    public func generateSessionNonce() : async Text {
+        await randomHex();
     };
 
     public func buildClaims(input : ClaimInput) : StitchingClaims {
@@ -131,6 +151,8 @@ module {
             sessionId = input.sessionId;
             issuedAt = issuedAtSeconds;
             expiresAt = expiresAtSeconds;
+            hostCanisterId = input.hostCanisterId;
+            sessionNonce = input.sessionNonce;
         };
     };
 
@@ -141,6 +163,8 @@ module {
             ("session_id", #string(claims.sessionId)),
             ("iat", #number(#int(claims.issuedAt))),
             ("exp", #number(#int(claims.expiresAt))),
+            ("host_canister_id", #string(claims.hostCanisterId)),
+            ("session_nonce", #string(claims.sessionNonce)),
         ];
 
         {

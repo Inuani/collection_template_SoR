@@ -1,7 +1,6 @@
 import Text "mo:core/Text";
 
 import Time "mo:core/Time";
-import Int "mo:core/Int";
 import Debug "mo:core/Debug";
 import Blob "mo:core/Blob";
 import Array "mo:core/Array";
@@ -9,7 +8,6 @@ import Nat "mo:core/Nat";
 import Nat8 "mo:core/Nat8";
 import Result "mo:core/Result";
 import NatBase "mo:base/Nat";
-import NatX "mo:xtended-numbers@2/NatX";
 import JWT "mo:jwt@2";
 import Json "mo:json@1";
 import BaseX "mo:base-x-encoder";
