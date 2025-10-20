@@ -16,6 +16,7 @@ import Debug "mo:base/Debug";
 import RouterMiddleware "mo:liminal/Middleware/Router";
 import Theme "utils/theme";
 import Buttons "utils/buttons";
+import PeerRegistry "utils/peer_registry";
 import FileService "services/file_service";
 import CollectionService "services/collection_service";
 import StitchingService "services/stitching_service";
@@ -46,6 +47,9 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     let buttonsState = Buttons.init();
     transient let buttonsManager = Buttons.ButtonsManager(buttonsState);
+
+    let peerRegistryState = PeerRegistry.init();
+    transient let peerRegistry = PeerRegistry.Registry(peerRegistryState);
 
     transient let fileService = FileService.make(file_storage);
     transient let collectionService = CollectionService.make(initializer, collection);
@@ -432,6 +436,32 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     public shared ({ caller }) func clearAllButtons() : async () {
         assert (caller == initializer);
         buttonsManager.clearAllButtons()
+    };
+
+    // ============================================
+    // PEER REGISTRY MANAGEMENT (Admin Only)
+    // ============================================
+
+    public shared ({ caller }) func upsertPeer(canisterIdText: Text, jwtVerificationKeyHex: Text) : async () {
+        assert (caller == initializer);
+        peerRegistry.upsertPeer(canisterIdText, jwtVerificationKeyHex)
+    };
+
+    public shared ({ caller }) func removePeer(canisterIdText: Text) : async Bool {
+        assert (caller == initializer);
+        peerRegistry.removePeer(canisterIdText)
+    };
+
+    public query func getPeer(canisterIdText: Text) : async ?PeerRegistry.Peer {
+        peerRegistry.getPeer(canisterIdText)
+    };
+
+    public query func listPeers() : async [PeerRegistry.Peer] {
+        peerRegistry.listPeers()
+    };
+
+    public query func isAuthorizedPeer(canisterIdText: Text) : async Bool {
+        peerRegistry.isAuthorized(canisterIdText)
     };
 
 };
