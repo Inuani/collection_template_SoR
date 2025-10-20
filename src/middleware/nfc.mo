@@ -3,6 +3,7 @@ import Nat "mo:core/Nat";
 import Int "mo:core/Int";
 import Time "mo:core/Time";
 import Array "mo:core/Array";
+import JWT "mo:jwt@2";
 import App "mo:liminal/App";
 import HttpContext "mo:liminal/HttpContext";
 import Url "mo:url-kit@3";
@@ -12,11 +13,91 @@ import InvalidScan "../utils/invalid_scan";
 import Theme "../utils/theme";
 import StitchingToken "../utils/stitching_token";
 import PendingSessions "../utils/pending_sessions";
+import PeerRegistry "../utils/peer_registry";
+import StitchingApi "../utils/stitching_api";
 
 module NFCMiddleware {
 
     let sessionTtlSeconds : Nat = 300;
     let meetingWindowSeconds : Nat = 60;
+
+    type HostCanister = actor {
+        joinSession : (StitchingApi.JoinSessionRequest) -> async StitchingApi.JoinSessionResult;
+    };
+
+    func buildHostActor(hostCanisterId : Text) : HostCanister {
+        actor(hostCanisterId);
+    };
+
+    func buildHostRedirectUrl(hostCanisterId : Text, path : Text) : Text {
+        "https://" # hostCanisterId # ".raw.icp0.io" # path;
+    };
+
+    func remoteJoinSession(
+        hostCanisterId : Text,
+        sessionId : Text,
+        sessionNonce : Text,
+        jwtText : Text,
+        itemId : Nat,
+        canisterIdText : Text,
+        peerRegistry : PeerRegistry.Registry,
+        themeManager : Theme.ThemeManager
+    ) : async* App.HttpResponse {
+        if (not peerRegistry.isAuthorized(hostCanisterId)) {
+            return {
+                statusCode = 403;
+                headers = [("Content-Type", "text/html")];
+                body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage(themeManager));
+                streamingStrategy = null;
+            };
+        };
+
+        let hostActor : HostCanister = buildHostActor(hostCanisterId);
+        let request : StitchingApi.JoinSessionRequest = {
+            sessionId;
+            sessionNonce;
+            hostCanisterId;
+            participant = {
+                canisterId = canisterIdText;
+                itemId = itemId;
+            };
+            scanTimestamp = Time.now();
+            jwt = jwtText;
+        };
+
+        let joinResult = await hostActor.joinSession(request);
+
+        switch (joinResult) {
+            case (#ok(response)) {
+                let redirectUrl = buildHostRedirectUrl(hostCanisterId, response.redirectPath);
+                let message = if (response.alreadyJoined) {
+                    "Cet objet a déjà rejoint la session."
+                } else {
+                    "Scan réussi ! Redirection…"
+                };
+                let html = generateScanRedirectPage(redirectUrl, message, response.alreadyJoined);
+                {
+                    statusCode = 200;
+                    headers = [("Content-Type", "text/html")];
+                    body = ?Text.encodeUtf8(html);
+                    streamingStrategy = null;
+                }
+            };
+            case (#err(errMsg)) {
+                let html = generateScanRedirectPage(
+                    buildHostRedirectUrl(hostCanisterId, "/stitching/error"),
+                    "Impossible de rejoindre la stitching : " # errMsg,
+                    true
+                );
+                {
+                    statusCode = 200;
+                    headers = [("Content-Type", "text/html")];
+                    body = ?Text.encodeUtf8(html);
+                    streamingStrategy = null;
+                }
+            };
+        }
+    };
 
     // ========================================
     // NFC Utility Functions
@@ -167,6 +248,7 @@ module NFCMiddleware {
         protected_routes_storage: ProtectedRoutes.RoutesStorage,
         pendingSessions: PendingSessions.PendingSessions,
         themeManager: Theme.ThemeManager,
+        peerRegistry: PeerRegistry.Registry,
         canisterId: Text
     ) : App.Middleware {
         {
@@ -227,10 +309,58 @@ module NFCMiddleware {
                                 itemId = itemId;
                             };
 
-                            let identityStateOpt = StitchingToken.fromIdentity(context.getIdentity());
+                            let identityOpt = context.getIdentity();
+                            let identityStateOpt = StitchingToken.fromIdentity(identityOpt);
                             let sessionIdFromToken = switch (identityStateOpt) {
                                 case (?state) state.sessionId;
                                 case null null;
+                            };
+                            let hostIdFromToken = switch (identityStateOpt) {
+                                case (?state) state.hostCanisterId;
+                                case null null;
+                            };
+                            let sessionNonceFromToken = switch (identityStateOpt) {
+                                case (?state) state.sessionNonce;
+                                case null null;
+                            };
+                            let jwtTextOpt = switch (identityOpt) {
+                                case (?identity) {
+                                    switch (identity.kind) {
+                                        case (#jwt(token)) ?JWT.toText(token);
+                                        case (_) null;
+                                    }
+                                };
+                                case null null;
+                            };
+
+                            switch (hostIdFromToken) {
+                                case (?hostId) {
+                                    if (hostId != "" and hostId != canisterId) {
+                                        switch (sessionIdFromToken, sessionNonceFromToken, jwtTextOpt) {
+                                            case (?sessionId, ?sessionNonce, ?jwtText) {
+                                                return await* remoteJoinSession(
+                                                    hostId,
+                                                    sessionId,
+                                                    sessionNonce,
+                                                    jwtText,
+                                                    itemId,
+                                                    canisterId,
+                                                    peerRegistry,
+                                                    themeManager
+                                                );
+                                            };
+                                            case _ {
+                                                return {
+                                                    statusCode = 400;
+                                                    headers = [("Content-Type", "text/html")];
+                                                    body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage(themeManager));
+                                                    streamingStrategy = null;
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                                case null {};
                             };
 
                             let now = Time.now();

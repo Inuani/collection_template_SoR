@@ -16,6 +16,12 @@ import Debug "mo:base/Debug";
 import RouterMiddleware "mo:liminal/Middleware/Router";
 import Theme "utils/theme";
 import Buttons "utils/buttons";
+import StitchingToken "utils/stitching_token";
+import StitchingApi "utils/stitching_api";
+import Array "mo:core/Array";
+import Time "mo:core/Time";
+import Int "mo:core/Int";
+import JWT "mo:jwt@2";
 import PeerRegistry "utils/peer_registry";
 import FileService "services/file_service";
 import CollectionService "services/collection_service";
@@ -29,6 +35,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     transient let canisterId = Principal.fromActor(self);
     transient let canisterIdText = Principal.toText(canisterId);
     type ChunkId = Files.ChunkId;
+    type SessionItem = StitchingToken.SessionItem;
 
     var assetStableData = HttpAssets.init_stable_store(canisterId, initializer);
     assetStableData := HttpAssets.upgrade_stable_store(assetStableData);
@@ -90,7 +97,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                     #header("Authorization"),
                 ];
             }),
-            NFCMiddleware.createNFCProtectionMiddleware(protected_routes_storage, pendingSessions, themeManager, canisterIdText),
+            NFCMiddleware.createNFCProtectionMiddleware(protected_routes_storage, pendingSessions, themeManager, peerRegistry, canisterIdText),
             AssetsMiddleware.new(assetMiddlewareConfig),
             RouterMiddleware.new(Routes.routerConfig(
                 canisterIdText,
@@ -153,6 +160,139 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     public query func getStoredFileCount() : async Nat {
         fileService.getStoredFileCount();
+    };
+
+    // ============================================
+    // CROSS-CANISTER SESSION COORDINATION
+    // ============================================
+
+    public shared ({ caller }) func joinSession(request : StitchingApi.JoinSessionRequest) : async StitchingApi.JoinSessionResult {
+        let callerText = Principal.toText(caller);
+
+        if (not peerRegistry.isAuthorized(callerText)) {
+            return #err("Caller canister is not authorized");
+        };
+
+        if (request.hostCanisterId != canisterIdText) {
+            return #err("Request does not target this host canister");
+        };
+
+        if (request.participant.canisterId != callerText) {
+            return #err("Participant canister id mismatch");
+        };
+
+        let now = Time.now();
+
+        switch (pendingSessions.get(request.sessionId, now)) {
+            case null {
+                #err("Session not found or expired");
+            };
+            case (?session) {
+                if (session.hostCanisterId != canisterIdText) {
+                    return #err("Session is not owned by this canister");
+                };
+
+                if (session.sessionNonce != request.sessionNonce) {
+                    return #err("Session nonce mismatch");
+                };
+
+                switch (JWT.parse(request.jwt)) {
+                    case (#err(err)) {
+                        return #err("Failed to parse JWT: " # err);
+                    };
+                    case (#ok(token)) {
+                        switch (StitchingToken.parseJWT(token)) {
+                            case null {
+                                return #err("JWT does not contain stitching session claims");
+                            };
+                            case (?state) {
+                                switch (state.sessionId) {
+                                    case (?sid) {
+                                        if (sid != request.sessionId) {
+                                            return #err("JWT session id mismatch");
+                                        };
+                                    };
+                                    case null {
+                                        return #err("JWT missing session id");
+                                    };
+                                };
+
+                                switch (state.sessionNonce) {
+                                    case (?nonce) {
+                                        if (nonce != request.sessionNonce) {
+                                            return #err("JWT nonce mismatch");
+                                        };
+                                    };
+                                    case null {
+                                        return #err("JWT missing nonce");
+                                    };
+                                };
+
+                                switch (state.hostCanisterId) {
+                                    case (?hostId) {
+                                        if (hostId != canisterIdText) {
+                                            return #err("JWT host canister mismatch");
+                                        };
+                                    };
+                                    case null {
+                                        return #err("JWT missing host canister id");
+                                    };
+                                };
+
+                                switch (state.expiresAt) {
+                                    case (?expSeconds) {
+                                        let expNanos = expSeconds * 1_000_000_000;
+                                        if (now >= expNanos) {
+                                            return #err("JWT expired");
+                                        };
+                                    };
+                                    case null {};
+                                };
+                            };
+                        };
+                    };
+                };
+
+                let alreadyPresent = Array.find<SessionItem>(
+                    session.items,
+                    func(entry : SessionItem) : Bool {
+                        entry.canisterId == request.participant.canisterId and entry.itemId == request.participant.itemId
+                    },
+                );
+
+                let updatedItems = switch (alreadyPresent) {
+                    case (?_) session.items;
+                    case null Array.concat(session.items, [request.participant]);
+                };
+
+                let ttlNanos = Int.fromNat(session.ttlSeconds) * 1_000_000_000;
+                let updatedSession : PendingSessions.Session = {
+                    items = updatedItems;
+                    startTime = session.startTime;
+                    expiresAt = now + ttlNanos;
+                    ttlSeconds = session.ttlSeconds;
+                    createdAt = session.createdAt;
+                    hostCanisterId = session.hostCanisterId;
+                    sessionNonce = session.sessionNonce;
+                };
+                pendingSessions.put(request.sessionId, updatedSession);
+
+                let redirectPath = if (updatedItems.size() >= 2) {
+                    "/stitching/active"
+                } else {
+                    "/stitching/waiting"
+                };
+
+                #ok({
+                    redirectPath;
+                    alreadyJoined = switch (alreadyPresent) {
+                        case (?_) true;
+                        case null false;
+                    };
+                    currentParticipants = updatedItems.size();
+                });
+            };
+        };
     };
 
     // Utility to test JWT minting via management canister ECDSA
