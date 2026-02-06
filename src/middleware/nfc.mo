@@ -198,13 +198,9 @@ module NFCMiddleware {
 
                             switch (itemIdOpt) {
                                 case (?itemId) {
-                                    // This is an item route - verify NFC first
-                                    let routeCmacs = protected_routes_storage.getRouteCmacs(path);
-                                    let scanCount = protection.scan_count_;
-
-                                    // Verify NFC signature
-                                    let counter = Scan.scan(routeCmacs, url, scanCount);
-                                    if (counter == 0) {
+                                    // This is an item route - verify NFC
+                                    // Use verifyRouteAccess to handle multi-tag (UID) logic
+                                    if (not protected_routes_storage.verifyRouteAccess(path, url)) {
                                         // Invalid NFC scan
                                         return {
                                             statusCode = 403;
@@ -213,9 +209,8 @@ module NFCMiddleware {
                                             streamingStrategy = null;
                                         };
                                     };
-
-                                    // Update scan count
-                                    ignore protected_routes_storage.verifyRouteAccess(path, url);
+                                    
+                                    // VerifyRouteAccess already updated the scan count if successful
 
                                     // Get session from context (unwrap optional)
                                     switch (context.session) {

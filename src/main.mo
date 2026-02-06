@@ -368,22 +368,22 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
         ignore protected_routes_storage.addProtectedRoute(path);
     };
 
-    public shared ({ caller }) func update_route_cmacs(path : Text, new_cmacs : [Text]) : async () {
+    public shared ({ caller }) func update_route_cmacs(path : Text, uid : Text, new_cmacs : [Text]) : async () {
         assert (caller == initializer);
-        ignore protected_routes_storage.updateRouteCmacs(path, new_cmacs);
+        ignore protected_routes_storage.updateRouteCmacs(path, uid, new_cmacs);
     };
 
-    public shared ({ caller }) func append_route_cmacs(path : Text, new_cmacs : [Text]) : async () {
+    public shared ({ caller }) func append_route_cmacs(path : Text, uid : Text, new_cmacs : [Text]) : async () {
         assert (caller == initializer);
-        ignore protected_routes_storage.appendRouteCmacs(path, new_cmacs);
+        ignore protected_routes_storage.appendRouteCmacs(path, uid, new_cmacs);
     };
 
     public query func get_route_protection(path : Text) : async ?ProtectedRoutes.ProtectedRoute {
         protected_routes_storage.getRoute(path);
     };
 
-    public query func get_route_cmacs(path : Text) : async [Text] {
-        protected_routes_storage.getRouteCmacs(path);
+    public query func get_route_cmacs(path : Text, uid : Text) : async [Text] {
+        protected_routes_storage.getRouteCmacs(path, uid);
     };
 
     public query func listProtectedRoutesSummary() : async [(Text, Nat)] {

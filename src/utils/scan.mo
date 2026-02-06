@@ -92,4 +92,16 @@ module {
 
         return res;
     };
+    public func getUid(url : Text) : ?Text {
+        let full_query = Iter.toArray(Text.split(url, #char '?'));
+        if (full_query.size() < 2) return null;
+        let queries = Iter.toArray(Text.split(full_query[1], #char '&'));
+        if (queries.size() == 0) return null;
+        let uid_query = Iter.toArray(Text.split(queries[0], #char '='));
+        if (uid_query.size() == 2 and uid_query[0] == "uid") {
+            ?uid_query[1]
+        } else {
+            null
+        }
+    };
 }

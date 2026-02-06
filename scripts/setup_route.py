@@ -210,7 +210,7 @@ def setup_route_and_program(
 
         # Pass the ic_mode flag to batch_cmacs.py
         ic_flag_param = "--ic" if ic_mode else ""
-        cmd = f"python3 scripts/batch_cmacs.py cmacs.json {canister_name} {page} {ic_flag_param}"
+        cmd = f"python3 scripts/batch_cmacs.py cmacs.json {canister_name} {page} {card_uid} {ic_flag_param}"
         exit_code, stdout, stderr = run_command(cmd)
         if exit_code != 0:
             print(f"Error uploading CMACs: {stderr}")
