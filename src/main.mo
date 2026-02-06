@@ -97,6 +97,14 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
         errorSerializer = Liminal.defaultJsonErrorSerializer;
         candidRepresentationNegotiator = Liminal.defaultCandidRepresentationNegotiator;
         logger = Liminal.buildDebugLogger(#info);
+        urlNormalization = {
+            usernameIsCaseSensitive = false;
+            pathIsCaseSensitive = false;
+            queryKeysAreCaseSensitive = false;
+            removeEmptyPathSegments = true;
+            resolvePathDotSegments = true;
+            preserveTrailingSlash = false;
+        };
     });
 
     // Http server methods

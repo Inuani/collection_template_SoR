@@ -21,7 +21,7 @@ module StitchingRoutes {
     ) : [Router.RouteConfig] {
         return [
             // Stitching waiting page (first scan - waiting for more items)
-            Router.getQuery("/stitching/waiting", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
+            Router.get("/stitching/waiting", #query_(func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
                 Debug.print("[ROUTE] /stitching/waiting accessed");
                 let _itemIdTextOpt = ctx.getQueryParam("item");
 
@@ -96,10 +96,10 @@ module StitchingRoutes {
                         ctx.buildResponse(#ok, #html(html))
                     };
                 }
-            }),
+            })),
 
             // Stitching active page (multiple items scanned)
-            Router.getQuery("/stitching/active", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
+            Router.get("/stitching/active", #query_(func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
                 Debug.print("[ROUTE] /stitching/active accessed");
                 // Get items from session (unwrap optional)
                 let sessionOpt = ctx.httpContext.session;
@@ -166,10 +166,10 @@ module StitchingRoutes {
 
                 let html = Stitching.generateActiveSessionPage(itemsInSession, allItems, stitchingStartTime, finalizeToken, themeManager);
                 ctx.buildResponse(#ok, #html(html))
-            }),
+            })),
 
             // Stitching finalize (process the stitching from session)
-            Router.getAsyncUpdate("/stitching/finalize_session", func(ctx: RouteContext.RouteContext) : async* Liminal.HttpResponse {
+            Router.get("/stitching/finalize_session", #update(#async_(func(ctx: RouteContext.RouteContext) : async* Liminal.HttpResponse {
                 Debug.print("[FINALIZE] Endpoint called");
 
                 // 1. Verify token first
@@ -279,10 +279,10 @@ module StitchingRoutes {
                     body = ?Text.encodeUtf8("<html><body>Stitching finalized! Redirecting...</body></html>");
                     streamingStrategy = null;
                 };
-            }),
+            }))),
 
             // Stitching success route (session-based system)
-            Router.getQuery("/stitching/success", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
+            Router.get("/stitching/success", #query_(func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
                 let itemsTextOpt = ctx.getQueryParam("items");
 
                 let itemsText = switch (itemsTextOpt) {
@@ -306,10 +306,10 @@ module StitchingRoutes {
                 let allItems = collection.getAllItems();
                 let html = Stitching.generateSessionSuccessPage(itemIds, allItems, themeManager);
                 ctx.buildResponse(#ok, #html(html))
-            }),
+            })),
 
             // Stitching error route
-            Router.getQuery("/stitching/error", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
+            Router.get("/stitching/error", #query_(func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
                 let errorMsgOpt = ctx.getQueryParam("msg");
 
                 let errorMsg = switch (errorMsgOpt) {
@@ -319,7 +319,7 @@ module StitchingRoutes {
 
                 let html = Stitching.generateStitchingErrorPage(errorMsg, themeManager);
                 ctx.buildResponse(#ok, #html(html))
-            }),
+            })),
         ]
     };
 }

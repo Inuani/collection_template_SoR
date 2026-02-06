@@ -34,12 +34,12 @@ module Routes {
       prefix              = null;
       identityRequirement = null;
       routes = Array.flatten([
-        [Router.getQuery("/",
+        [Router.get("/", #query_(
           func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
             Home.homePage(ctx, canisterId, collection.getCollectionName(), themeManager, buttonsManager.getAllButtons())
           }
-        ),
-        Router.getQuery("/item/{id}", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
+        )),
+        Router.get("/item/{id}", #query_(func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
                    let idText = ctx.getRouteParam("id");
 
                    let id = switch (Nat.fromText(idText)) {
@@ -52,13 +52,13 @@ module Routes {
 
                    let html = CollectionView.generateItemPage(collection, id, themeManager);
                    ctx.buildResponse(#ok, #html(html))
-               }),
-               Router.getQuery("/collection", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
+               })),
+               Router.get("/collection", #query_(func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
                    let html = CollectionView.generateCollectionPage(collection, themeManager);
                    ctx.buildResponse(#ok, #html(html))
-               }),
+               })),
 
-        Router.getQuery("/stitch/{id}", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
+        Router.get("/stitch/{id}", #query_(func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
                    let idText = ctx.getRouteParam("id");
 
                    let id = switch (Nat.fromText(idText)) {
@@ -71,7 +71,7 @@ module Routes {
 
                    let html = CollectionView.generateItemPage(collection, id, themeManager);
                    ctx.buildResponse(#ok, #html(html))
-               }),
+               })),
 
         ],
 
@@ -82,7 +82,7 @@ module Routes {
 
         // Serve individual file chunks as raw bytes for reconstruction
         // MUST come before /files/{filename} route to match correctly
-        Router.getQuery("/files/{filename}/chunk/{chunkId}", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
+        Router.get("/files/{filename}/chunk/{chunkId}", #query_(func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
             let filename = ctx.getRouteParam("filename");
             let chunkIdText = ctx.getRouteParam("chunkId");
 
@@ -110,11 +110,11 @@ module Routes {
                 };
             }
 
-        }),
+        })),
 
         // Serve backend-stored files with NFC protection support
         // Works with query parameters for NFC: /files/filename?uid=...&cmac=...&ctr=...
-        Router.getQuery("/files/{filename}", func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
+        Router.get("/files/{filename}", #query_(func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
             let filename = ctx.getRouteParam("filename");
 
             // Get first chunk to check if file exists
@@ -128,13 +128,13 @@ module Routes {
                     ctx.buildResponse(#notFound, #error(#message("File not found")))
                 };
             };
-        }),
+        })),
 
-        Router.getQuery("/{path}",
+        Router.get("/{path}", #query_(
           func(ctx) : Liminal.HttpResponse {
             ctx.buildResponse(#notFound, #error(#message("Not found")))
           }
-        ),
+        )),
       ]]);
     }
   }

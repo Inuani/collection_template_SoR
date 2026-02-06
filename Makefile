@@ -52,7 +52,7 @@ delete_asset:
 	dfx canister call --ic $(CANISTER_ID) delete_asset '(record { key = "/logo.webp" })'
 
 upload_file:
-	./scripts/upload_file.sh certificats/equipe.png "ekip" "Élie" $(CANISTER_NAME) $(DFX_NETWORK)
+	./scripts/upload_file.sh certificats/luandi_caramelo.m4a "Caramelo" "Luandi" $(CANISTER_NAME) $(DFX_NETWORK)
 
 download_file:
 	./scripts/download_file.sh "ekip" img_downloaded.png $(CANISTER_NAME) $(DFX_NETWORK)
@@ -90,7 +90,7 @@ check_protect_routes:
 	dfx canister call --ic $(CANISTER_NAME) listProtectedRoutesSummary
 
 collection_name_update:
-	dfx canister call collection --ic setCollectionName '("Collection Ordre d'\''Évorev")'
+	dfx canister call $(CANISTER_NAME) setCollectionName '("Luandi")'
 
 button_create:
 	dfx canister call $(CANISTER_NAME) addButton '("Instagram", "https://www.instagram.com/collections_evorev/")'
