@@ -40,7 +40,7 @@ protect:
 	python3 scripts/setup_route.py $(CANISTER_ID) files/caramelo --cmac-count 200
 
 protect_ic:
-	python3 scripts/setup_route.py $(CANISTER_ID) files/certificat_1 --cmac-count $(CMAC_COUNT) --ic --random-key
+	python3 scripts/setup_route.py $(CANISTER_ID) files/caramelo --cmac-count $(CMAC_COUNT) --ic
 
 reinstall:
 	dfx deploy $(CANISTER_NAME) --mode reinstall
