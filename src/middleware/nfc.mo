@@ -185,7 +185,7 @@ module NFCMiddleware {
         {
             name = "NFC Protection with Session-Based Stitchings";
             handleQuery = func(context : HttpContext.HttpContext, next : App.Next) : App.QueryResult {
-                if (protected_routes_storage.isProtectedRoute(context.request.url)) {
+                if (protected_routes_storage.isProtectedRoute(context.request.url) or Text.startsWith(context.request.url, #text "/api/stream/")) {
                     return #upgrade; // Force verification in update call
                 };
                 next();
@@ -348,12 +348,14 @@ module NFCMiddleware {
                                             } else {
                                                 // NFC Valid! Generate Token and Redirect.
                                                 let newToken = file_storage.generateToken(filename);
-                                                let redirectUrl = pathOnly # "?token=" # newToken;
+                                                // let redirectUrl = pathOnly # "?token=" # newToken;
+
+                                                let html = file_storage.generateHTMLWrapper(filename, newToken, themeManager);
 
                                                 return {
-                                                    statusCode = 302;
-                                                    headers = [("Location", redirectUrl)];
-                                                    body = ?Text.encodeUtf8("Redirecting...");
+                                                    statusCode = 200;
+                                                    headers = [("Content-Type", "text/html")];
+                                                    body = ?Text.encodeUtf8(html);
                                                     streamingStrategy = null;
                                                 };
                                             };

@@ -14,6 +14,7 @@ import Time "mo:core/Time";
 import Sha "utils/sha";
 import Int "mo:core/Int";
 import Blob "mo:core/Blob";
+import Theme "utils/theme";
 
 module {
 
@@ -310,7 +311,97 @@ module {
         // Stateless Token Generation (Timestamp + Signature)
         // -------------------------------------------------------------------------
         private let secret = "LUANDI_SECRET_KEY_QM9"; // Rotate this in production!
-        private let tokenDuration = 300_000_000_000; // 5 minutes in nanoseconds
+        private let tokenDuration = 120_000_000_000; // 2 minutes in nanoseconds
+
+        public func generateHTMLWrapper(filename : Text, token : Text, themeManager : Theme.ThemeManager) : Text {
+            let theme = themeManager.getTheme();
+            "<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+    <meta charset=\"UTF-8\">
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+    <title>Now Playing: " # filename # "</title>
+    <style>
+        body {
+            background-color: #222;
+            color: #eee;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            max-width: 90%;
+            width: 400px;
+        }
+        h2 {
+            margin-bottom: 1.5rem;
+            font-weight: 600;
+        }
+        audio {
+            width: 100%;
+            margin-bottom: 1.5rem;
+            border-radius: 8px;
+        }
+        .timer-container {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            margin-top: 1rem;
+        }
+        #timer {
+            font-weight: bold;
+            color: " # theme.primary # ";
+        }
+        .status {
+            margin-top: 0.5rem;
+            font-size: 0.8rem;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class=\"container\">
+        <h2>" # filename # "</h2>
+        <audio controls autoplay>
+            <source src=\"/api/stream/" # filename # "?token=" # token # "\" type=\"audio/mp4\">
+            Your browser does not support the audio element.
+        </audio>
+        <div class=\"timer-container\">
+            Access expires in: <span id=\"timer\">60</span>s
+        </div>
+        <div class=\"status\">Secure Stream Active</div>
+    </div>
+
+    <script>
+        // Simple countdown timer
+        let timeLeft = 60;
+        const timerElement = document.getElementById('timer');
+
+        const countdown = setInterval(() => {
+            timeLeft--;
+            timerElement.textContent = timeLeft;
+
+            if (timeLeft <= 0) {
+                clearInterval(countdown);
+                timerElement.textContent = \"Expired\";
+                document.querySelector('.status').textContent = \"Session Expired. Please scan again.\";
+                document.querySelector('.status').style.color = \"red\";
+            }
+        }, 1000);
+    </script>
+</body>
+</html>";
+        };
 
         public func generateToken(filename : Text) : Text {
             let now = Time.now();
@@ -354,7 +445,7 @@ module {
                 case (?timestamp) {
                     let now = Time.now();
                     // Check if token is too old OR from the future (allow 1 minute skew)
-                    if (now > timestamp + tokenDuration or timestamp > now + 60_000_000_000) {
+                    if (now > timestamp + tokenDuration or timestamp > now + 120_000_000_000) {
                         return false;
                     };
                 };

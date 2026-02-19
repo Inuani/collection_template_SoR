@@ -112,7 +112,6 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
             CORSMiddleware.createCORSMiddleware(),
             SessionMiddleware.new(sessionConfig),
             NFCMiddleware.createNFCProtectionMiddleware(protected_routes_storage, themeManager, file_storage),
-            AssetsMiddleware.new(assetMiddlewareConfig),
             RouterMiddleware.new(
                 Routes.routerConfig(
                     Principal.toText(canisterId),
@@ -123,6 +122,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                     buttonsManager,
                 )
             ),
+            AssetsMiddleware.new(assetMiddlewareConfig),
         ];
         errorSerializer = Liminal.defaultJsonErrorSerializer;
         candidRepresentationNegotiator = Liminal.defaultCandidRepresentationNegotiator;
