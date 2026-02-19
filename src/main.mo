@@ -13,6 +13,7 @@ import Files "files";
 import Collection "collection";
 import Result "mo:core/Result";
 import RouterMiddleware "mo:liminal/Middleware/Router";
+import Blob "mo:base/Blob";
 import Theme "utils/theme";
 import Buttons "utils/buttons";
 import FileService "services/file_service";
@@ -60,9 +61,6 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
         store = assetStore;
     };
 
-
-
-
     // Configure session middleware for stitching system
     transient let sessionStore = SessionMiddleware.buildInMemoryStore();
     transient let sessionConfig : SessionMiddleware.Config = {
@@ -79,20 +77,52 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
         idGenerator = SessionMiddleware.generateRandomId;
     };
 
+    // Liminal compatible streaming callback
+    // Types:
+    // Token: Blob
+    // Response: { body: Blob; token: ?Blob } (non-optional async result)
+    public type StreamingCallbackResponse = {
+        body : Blob;
+        token : ?Blob;
+    };
+
+    public query func streamingCallback(token : Blob) : async StreamingCallbackResponse {
+        switch (Files.tokenFromBlob(Blob.toArray(token))) {
+            case (null) { ({ body = Blob.fromArray([]); token = null }) };
+            case (?t) {
+                switch (file_storage.processStreamingCallback(t)) {
+                    case (null) ({ body = Blob.fromArray([]); token = null });
+                    case (?res) {
+                        let nextToken = switch (res.token) {
+                            case (null) null;
+                            case (?nt) ?Blob.fromArray(Files.tokenToBlob(nt));
+                        };
+                        ({
+                            body = Blob.fromArray(res.body);
+                            token = nextToken;
+                        });
+                    };
+                };
+            };
+        };
+    };
+
     transient let app = Liminal.App({
         middleware = [
             CORSMiddleware.createCORSMiddleware(),
             SessionMiddleware.new(sessionConfig),
-            NFCMiddleware.createNFCProtectionMiddleware(protected_routes_storage, themeManager),
+            NFCMiddleware.createNFCProtectionMiddleware(protected_routes_storage, themeManager, file_storage),
             AssetsMiddleware.new(assetMiddlewareConfig),
-            RouterMiddleware.new(Routes.routerConfig(
-                Principal.toText(canisterId),
-                fileService.getFileChunk,
-                collection,
-                themeManager,
-                file_storage,
-                buttonsManager
-            )),
+            RouterMiddleware.new(
+                Routes.routerConfig(
+                    Principal.toText(canisterId),
+                    streamingCallback,
+                    collection,
+                    themeManager,
+                    file_storage,
+                    buttonsManager,
+                )
+            ),
         ];
         errorSerializer = Liminal.defaultJsonErrorSerializer;
         candidRepresentationNegotiator = Liminal.defaultCandidRepresentationNegotiator;
@@ -116,7 +146,6 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     public func http_request_update(request : Liminal.RawUpdateHttpRequest) : async Liminal.RawUpdateHttpResponse {
         await* app.http_request_update(request);
     };
-
 
     public query func http_request_streaming_callback(token : HttpAssets.StreamingToken) : async HttpAssets.StreamingCallbackResponse {
         switch (assetStore.http_request_streaming_callback(token)) {
@@ -143,6 +172,17 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
         fileService.getFileChunk(title, chunkId);
     };
 
+    public query func getFileStart(title : Text) : async ?{
+        chunk : [Nat8];
+        totalChunks : Nat;
+        contentType : Text;
+        title : Text;
+        artist : Text;
+        nextToken : ?Files.StreamingCallbackToken;
+    } {
+        file_storage.getFileStart(title);
+    };
+
     public query func listFiles() : async [(Text, Text, Text)] {
         fileService.listFiles();
     };
@@ -160,58 +200,58 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     // ============================================
 
     public shared ({ caller }) func addCollectionItem(
-        name: Text,
-        thumbnailUrl: Text,
-        imageUrl: Text,
-        description: Text,
-        rarity: Text,
-        attributes: [(Text, Text)]
+        name : Text,
+        thumbnailUrl : Text,
+        imageUrl : Text,
+        description : Text,
+        rarity : Text,
+        attributes : [(Text, Text)],
     ) : async Nat {
-        collectionService.addItem(caller, name, thumbnailUrl, imageUrl, description, rarity, attributes)
+        collectionService.addItem(caller, name, thumbnailUrl, imageUrl, description, rarity, attributes);
     };
 
     public shared ({ caller }) func updateCollectionItem(
-        id: Nat,
-        name: Text,
-        thumbnailUrl: Text,
-        imageUrl: Text,
-        description: Text,
-        rarity: Text,
-        attributes: [(Text, Text)]
+        id : Nat,
+        name : Text,
+        thumbnailUrl : Text,
+        imageUrl : Text,
+        description : Text,
+        rarity : Text,
+        attributes : [(Text, Text)],
     ) : async Result.Result<(), Text> {
-        collectionService.updateItem(caller, id, name, thumbnailUrl, imageUrl, description, rarity, attributes)
+        collectionService.updateItem(caller, id, name, thumbnailUrl, imageUrl, description, rarity, attributes);
     };
 
-    public shared ({ caller }) func deleteCollectionItem(id: Nat) : async Result.Result<(), Text> {
-        collectionService.deleteItem(caller, id)
+    public shared ({ caller }) func deleteCollectionItem(id : Nat) : async Result.Result<(), Text> {
+        collectionService.deleteItem(caller, id);
     };
 
-    public query func getCollectionItem(id: Nat) : async ?Collection.Item {
-        collectionService.getItem(id)
+    public query func getCollectionItem(id : Nat) : async ?Collection.Item {
+        collectionService.getItem(id);
     };
 
     public query func getAllCollectionItems() : async [Collection.Item] {
-        collectionService.getAllItems()
+        collectionService.getAllItems();
     };
 
     public query func getCollectionItemCount() : async Nat {
-        collectionService.getItemCount()
+        collectionService.getItemCount();
     };
 
-    public shared ({ caller }) func setCollectionName(name: Text) : async () {
-        collectionService.setCollectionName(caller, name)
+    public shared ({ caller }) func setCollectionName(name : Text) : async () {
+        collectionService.setCollectionName(caller, name);
     };
 
-    public shared ({ caller }) func setCollectionDescription(description: Text) : async () {
-        collectionService.setCollectionDescription(caller, description)
+    public shared ({ caller }) func setCollectionDescription(description : Text) : async () {
+        collectionService.setCollectionDescription(caller, description);
     };
 
     public query func getCollectionName() : async Text {
-        collectionService.getCollectionName()
+        collectionService.getCollectionName();
     };
 
     public query func getCollectionDescription() : async Text {
-        collectionService.getCollectionDescription()
+        collectionService.getCollectionDescription();
     };
 
     // ============================================
@@ -219,23 +259,23 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     // ============================================
 
     // Add tokens to an item
-    public shared func addTokens(itemId: Nat, amount: Nat) : async Result.Result<(), Text> {
-        stitchingService.addTokens(itemId, amount)
+    public shared func addTokens(itemId : Nat, amount : Nat) : async Result.Result<(), Text> {
+        stitchingService.addTokens(itemId, amount);
     };
 
     // Record a stitching for multiple items
-    public shared func recordStitching(itemIds: [Nat], stitchingId: Text, tokensEarned: Nat) : async Result.Result<(), Text> {
-        stitchingService.recordStitching(itemIds, stitchingId, tokensEarned)
+    public shared func recordStitching(itemIds : [Nat], stitchingId : Text, tokensEarned : Nat) : async Result.Result<(), Text> {
+        stitchingService.recordStitching(itemIds, stitchingId, tokensEarned);
     };
 
     // Get item's token balance
-    public query func getItemBalance(itemId: Nat) : async Result.Result<Nat, Text> {
-        stitchingService.getItemBalance(itemId)
+    public query func getItemBalance(itemId : Nat) : async Result.Result<Nat, Text> {
+        stitchingService.getItemBalance(itemId);
     };
 
     // Get item's stitching history
-    public query func getItemStitchingHistory(itemId: Nat) : async Result.Result<[Collection.StitchingRecord], Text> {
-        stitchingService.getItemStitchingHistory(itemId)
+    public query func getItemStitchingHistory(itemId : Nat) : async Result.Result<[Collection.StitchingRecord], Text> {
+        stitchingService.getItemStitchingHistory(itemId);
     };
 
     assetStore.set_streaming_callback(http_request_streaming_callback);
@@ -394,54 +434,54 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     // THEME MANAGEMENT FUNCTIONS (Admin Only)
     // ============================================
 
-    public shared ({ caller }) func setTheme(primary: Text, secondary: Text) : async Theme.Theme {
+    public shared ({ caller }) func setTheme(primary : Text, secondary : Text) : async Theme.Theme {
         assert (caller == initializer);
-        themeManager.setTheme(primary, secondary)
+        themeManager.setTheme(primary, secondary);
     };
 
     public query func getTheme() : async Theme.Theme {
-        themeManager.getTheme()
+        themeManager.getTheme();
     };
 
     public shared ({ caller }) func resetTheme() : async Theme.Theme {
         assert (caller == initializer);
-        themeManager.resetTheme()
+        themeManager.resetTheme();
     };
 
     // ============================================
     // BUTTONS MANAGEMENT FUNCTIONS (Admin Only)
     // ============================================
 
-    public shared ({ caller }) func addButton(buttonText: Text, buttonLink: Text) : async Nat {
+    public shared ({ caller }) func addButton(buttonText : Text, buttonLink : Text) : async Nat {
         assert (caller == initializer);
-        buttonsManager.addButton(buttonText, buttonLink)
+        buttonsManager.addButton(buttonText, buttonLink);
     };
 
-    public shared ({ caller }) func updateButton(index: Nat, buttonText: Text, buttonLink: Text) : async Bool {
+    public shared ({ caller }) func updateButton(index : Nat, buttonText : Text, buttonLink : Text) : async Bool {
         assert (caller == initializer);
-        buttonsManager.updateButton(index, buttonText, buttonLink)
+        buttonsManager.updateButton(index, buttonText, buttonLink);
     };
 
-    public shared ({ caller }) func deleteButton(index: Nat) : async Bool {
+    public shared ({ caller }) func deleteButton(index : Nat) : async Bool {
         assert (caller == initializer);
-        buttonsManager.deleteButton(index)
+        buttonsManager.deleteButton(index);
     };
 
-    public query func getButton(index: Nat) : async ?Buttons.Button {
-        buttonsManager.getButton(index)
+    public query func getButton(index : Nat) : async ?Buttons.Button {
+        buttonsManager.getButton(index);
     };
 
     public query func getAllButtons() : async [Buttons.Button] {
-        buttonsManager.getAllButtons()
+        buttonsManager.getAllButtons();
     };
 
     public query func getButtonCount() : async Nat {
-        buttonsManager.getButtonCount()
+        buttonsManager.getButtonCount();
     };
 
     public shared ({ caller }) func clearAllButtons() : async () {
         assert (caller == initializer);
-        buttonsManager.clearAllButtons()
+        buttonsManager.clearAllButtons();
     };
 
 };

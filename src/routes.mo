@@ -14,17 +14,18 @@ import Theme "utils/theme";
 import Files "files";
 import Buttons "utils/buttons";
 import StitchingRoutes "stitching_routes";
+import HttpAssets "mo:http-assets@0";
+
 
 module Routes {
+    public type StreamingCallbackResponse = {
+        body : Blob;
+        token : ?Blob;
+    };
+
    public func routerConfig(
        canisterId: Text,
-       getFileChunk: (Text, Nat) -> ?{
-           chunk : [Nat8];
-           totalChunks : Nat;
-           contentType : Text;
-           title : Text;
-           artist : Text;
-       },
+       streamingCallback: shared query (Blob) -> async StreamingCallbackResponse,
        collection: Collection.Collection,
        themeManager: Theme.ThemeManager,
        fileStorage: Files.FileStorage,
@@ -80,52 +81,37 @@ module Routes {
 
         [
 
-        // Serve individual file chunks as raw bytes for reconstruction
-        // MUST come before /files/{filename} route to match correctly
-        Router.get("/files/{filename}/chunk/{chunkId}", #query_(func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
-            let filename = ctx.getRouteParam("filename");
-            let chunkIdText = ctx.getRouteParam("chunkId");
-
-            switch (Nat.fromText(chunkIdText)) {
-                case (?chunkId) {
-                    switch (getFileChunk(filename, chunkId)) {
-                        case (?chunkData) {
-                            {
-                                statusCode = 200;
-                                headers = [
-                                    ("Content-Type", "application/octet-stream"),
-                                    ("Cache-Control", "public, max-age=31536000")
-                                ];
-                                body = ?Blob.fromArray(chunkData.chunk);
-                                streamingStrategy = null;
-                            }
-                        };
-                        case null {
-                            ctx.buildResponse(#notFound, #error(#message("Chunk not found")))
-                        };
-                    }
-                };
-                case null {
-                    ctx.buildResponse(#badRequest, #error(#message("Invalid chunk ID")))
-                };
-            }
-
-        })),
-
-        // Serve backend-stored files with NFC protection support
-        // Works with query parameters for NFC: /files/filename?uid=...&cmac=...&ctr=...
+        // Streaming file access
+        // Returns the first chunk directly and provides a streaming callback for the rest
         Router.get("/files/{filename}", #query_(func(ctx: RouteContext.RouteContext) : Liminal.HttpResponse {
             let filename = ctx.getRouteParam("filename");
 
-            // Get first chunk to check if file exists
-            switch (getFileChunk(filename, 0)) {
-                case (?fileInfo) {
-                    // Generate HTML page using files.mo
-                    let html = fileStorage.generateFilePage(filename, fileInfo, collection);
-                    ctx.buildResponse(#ok, #html(html))
+            switch (fileStorage.getFileStart(filename)) {
+                case (null) {
+                     ctx.buildResponse(#notFound, #error(#message("File not found")))
                 };
-                case null {
-                    ctx.buildResponse(#notFound, #error(#message("File not found")))
+                case (?start) {
+                    // Construct streaming strategy if more chunks exist
+                    // Construct streaming strategy if more chunks exist
+                    let strategy = switch (start.nextToken) {
+                        case (null) null;
+                        case (?token) ?#callback({
+                            callback = streamingCallback;
+                            token = Blob.fromArray(Files.tokenToBlob(token));
+                        });
+                    };
+                    
+                    {
+                        statusCode = 200;
+                        headers = [
+                            ("Content-Type", start.contentType),
+                            ("Cache-Control", "public, max-age=31536000"),
+                            ("Access-Control-Allow-Origin", "*"),
+                            ("Accept-Ranges", "bytes")
+                        ];
+                        body = ?Blob.fromArray(start.chunk);
+                        streamingStrategy = strategy;
+                    }
                 };
             };
         })),

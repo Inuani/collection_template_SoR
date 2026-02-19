@@ -11,6 +11,7 @@ import ProtectedRoutes "../nfc_protec_routes";
 import Scan "../utils/scan";
 import InvalidScan "../utils/invalid_scan";
 import Theme "../utils/theme";
+import Files "../files";
 
 module NFCMiddleware {
 
@@ -19,7 +20,11 @@ module NFCMiddleware {
     // ========================================
 
     // Extract NFC parameters from URL
-    public func extractNFCParams(url: Text) : {uid: Text; cmac: Text; ctr: Text} {
+    public func extractNFCParams(url : Text) : {
+        uid : Text;
+        cmac : Text;
+        ctr : Text;
+    } {
         let queries = Iter.toArray(Text.split(url, #char '?'));
 
         var uid = "";
@@ -33,20 +38,20 @@ module NFCMiddleware {
                 let keyValue = Iter.toArray(Text.split(param, #char '='));
                 if (keyValue.size() == 2) {
                     switch (keyValue[0]) {
-                        case "uid" { uid := keyValue[1]; };
-                        case "cmac" { cmac := keyValue[1]; };
-                        case "ctr" { ctr := keyValue[1]; };
+                        case "uid" { uid := keyValue[1] };
+                        case "cmac" { cmac := keyValue[1] };
+                        case "ctr" { ctr := keyValue[1] };
                         case _ {};
                     };
                 };
             };
         };
 
-        {uid = uid; cmac = cmac; ctr = ctr}
+        { uid = uid; cmac = cmac; ctr = ctr };
     };
 
     // Extract item ID from URL path - only works with pattern /stitch/#
-    public func extractItemIdFromUrl(url: Text) : ?Nat {
+    public func extractItemIdFromUrl(url : Text) : ?Nat {
         // Split URL by '/' and look for "stitch" followed by a numeric ID
         let parts = Iter.toArray(Text.split(url, #char '/'));
 
@@ -79,14 +84,14 @@ module NFCMiddleware {
             i += 1;
         };
 
-        null
+        null;
     };
 
     // Generate HTML response for NFC scan result
     public func generateScanRedirectPage(
-        redirectUrl: Text,
-        message: Text,
-        isError: Bool
+        redirectUrl : Text,
+        message : Text,
+        isError : Bool,
     ) : Text {
         let accentColor = if (isError) { "#ef4444" } else { "#10b981" };
         let icon = if (isError) { "⚠️" } else { "✅" };
@@ -165,7 +170,7 @@ module NFCMiddleware {
         <p class=\"status\">•••</p>
     </div>
 </body>
-</html>"
+</html>";
     };
 
     // ========================================
@@ -173,8 +178,9 @@ module NFCMiddleware {
     // ========================================
 
     public func createNFCProtectionMiddleware(
-        protected_routes_storage: ProtectedRoutes.RoutesStorage,
-        themeManager: Theme.ThemeManager
+        protected_routes_storage : ProtectedRoutes.RoutesStorage,
+        themeManager : Theme.ThemeManager,
+        file_storage : Files.FileStorage,
     ) : App.Middleware {
         {
             name = "NFC Protection with Session-Based Stitchings";
@@ -186,13 +192,10 @@ module NFCMiddleware {
             };
             handleUpdate = func(context : HttpContext.HttpContext, next : App.NextAsync) : async* App.HttpResponse {
                 let url = context.request.url;
-                if (protected_routes_storage.isProtectedRoute(url))
-                {
+                if (protected_routes_storage.isProtectedRoute(url)) {
                     let routes_array = protected_routes_storage.listProtectedRoutes();
-                    for ((path, protection) in routes_array.vals())
-                    {
-                        if (Text.contains(url, #text path))
-                        {
+                    for ((path, protection) in routes_array.vals()) {
+                        if (Text.contains(url, #text path)) {
                             // Extract item ID from URL if this is an item route
                             let itemIdOpt = extractItemIdFromUrl(url);
 
@@ -209,7 +212,7 @@ module NFCMiddleware {
                                             streamingStrategy = null;
                                         };
                                     };
-                                    
+
                                     // VerifyRouteAccess already updated the scan count if successful
 
                                     // Get session from context (unwrap optional)
@@ -233,11 +236,13 @@ module NFCMiddleware {
                                                     var items : [Nat] = [];
                                                     for (part in parts.vals()) {
                                                         switch (Nat.fromText(part)) {
-                                                            case (?n) { items := Array.concat(items, [n]); };
+                                                            case (?n) {
+                                                                items := Array.concat(items, [n]);
+                                                            };
                                                             case null {};
                                                         };
                                                     };
-                                                    items
+                                                    items;
                                                 };
                                             };
 
@@ -261,7 +266,9 @@ module NFCMiddleware {
                                                     var itemsText = "";
                                                     var first = true;
                                                     for (id in updatedItems.vals()) {
-                                                        if (not first) { itemsText #= "," };
+                                                        if (not first) {
+                                                            itemsText #= ",";
+                                                        };
                                                         itemsText #= Nat.toText(id);
                                                         first := false;
                                                     };
@@ -276,9 +283,9 @@ module NFCMiddleware {
 
                                                     // Redirect to stitching page
                                                     let redirectUrl = if (updatedItems.size() == 1) {
-                                                        "/stitching/waiting?item=" # Nat.toText(itemId)
+                                                        "/stitching/waiting?item=" # Nat.toText(itemId);
                                                     } else {
-                                                        "/stitching/active?items=" # itemsText
+                                                        "/stitching/active?items=" # itemsText;
                                                     };
 
                                                     let html = "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0;url=" # redirectUrl # "'></head><body> Scanned! Redirecting...</body></html>";
@@ -295,15 +302,61 @@ module NFCMiddleware {
                                     };
                                 };
                                 case null {
-                                    // Not an item route - use standard verification
-                                    if (not protected_routes_storage.verifyRouteAccess(path, url))
-                                    {
-                                        return
-                                        {
-                                            statusCode = 403;
-                                            headers = [("Content-Type", "text/html")];
-                                            body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage(themeManager));
-                                            streamingStrategy = null;
+                                    // Not an item route - use Stateless Token Redirect
+
+                                    // 1. Extract filename (e.g. "caramelo" from "/files/caramelo")
+                                    let pathOnly = Iter.toArray(Text.split(url, #char '?'))[0];
+                                    let pathSegments = Iter.toArray(Text.split(pathOnly, #char '/'));
+                                    let filename = if (pathSegments.size() > 0) pathSegments[pathSegments.size() - 1] else "";
+
+                                    // 2. Check for access token
+                                    var token : ?Text = null;
+                                    let queries = Iter.toArray(Text.split(url, #char '?'));
+                                    if (queries.size() >= 2) {
+                                        let params = Iter.toArray(Text.split(queries[1], #char '&'));
+                                        for (param in params.vals()) {
+                                            let keyValue = Iter.toArray(Text.split(param, #char '='));
+                                            if (keyValue.size() == 2 and keyValue[0] == "token") {
+                                                token := ?keyValue[1];
+                                            };
+                                        };
+                                    };
+
+                                    switch (token) {
+                                        case (?t) {
+                                            // Validate Token
+                                            // If valid, we do nothing and let it fall through to next()
+                                            if (not file_storage.validateToken(t, filename)) {
+                                                return {
+                                                    statusCode = 403;
+                                                    headers = [("Content-Type", "text/plain")];
+                                                    body = ?Text.encodeUtf8("Invalid or expired token");
+                                                    streamingStrategy = null;
+                                                };
+                                            };
+                                        };
+                                        case null {
+                                            // No token. Must be NFC scan.
+                                            // Verify NFC (Consumes Counter)
+                                            if (not protected_routes_storage.verifyRouteAccess(path, url)) {
+                                                return {
+                                                    statusCode = 403;
+                                                    headers = [("Content-Type", "text/html")];
+                                                    body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage(themeManager));
+                                                    streamingStrategy = null;
+                                                };
+                                            } else {
+                                                // NFC Valid! Generate Token and Redirect.
+                                                let newToken = file_storage.generateToken(filename);
+                                                let redirectUrl = pathOnly # "?token=" # newToken;
+
+                                                return {
+                                                    statusCode = 302;
+                                                    headers = [("Location", redirectUrl)];
+                                                    body = ?Text.encodeUtf8("Redirecting...");
+                                                    streamingStrategy = null;
+                                                };
+                                            };
                                         };
                                     };
                                 };
@@ -315,4 +368,4 @@ module NFCMiddleware {
             };
         };
     };
-}
+};
