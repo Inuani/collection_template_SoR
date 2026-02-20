@@ -5,24 +5,22 @@ import Iter "mo:core/Iter";
 import Char "mo:core/Char";
 import Nat8 "mo:core/Nat8";
 import Nat32 "mo:core/Nat32";
-import Sha "sha";
+import Sha256 "mo:sha2/Sha256";
+import Blob "mo:core/Blob";
 
 module {
-    public func hexToNat(hexString: Text) : Nat {
+    public func hexToNat(hexString : Text) : Nat {
         var result : Nat = 0;
         for (char in hexString.chars()) {
-            if (Char.toNat32(char) >= Char.toNat32('0') and Char.toNat32(char) <= Char.toNat32( '9')) {
+            if (Char.toNat32(char) >= Char.toNat32('0') and Char.toNat32(char) <= Char.toNat32('9')) {
                 result := result * 16 + (Nat32.toNat(Char.toNat32(char)) - 48);
-            }
-            else if (Char.toNat32(char) >= Char.toNat32('A') and Char.toNat32(char) <= Char.toNat32( 'F')) {
+            } else if (Char.toNat32(char) >= Char.toNat32('A') and Char.toNat32(char) <= Char.toNat32('F')) {
                 result := result * 16 + (Nat32.toNat(Char.toNat32(char)) - 55);
-            }
-            else if (Char.toNat32(char) >= Char.toNat32('a') and Char.toNat32(char) <= Char.toNat32('f')) {
+            } else if (Char.toNat32(char) >= Char.toNat32('a') and Char.toNat32(char) <= Char.toNat32('f')) {
                 result := result * 16 + (Nat32.toNat(Char.toNat32(char)) - 87);
-            }
-            else {
-                assert(false);
-            }
+            } else {
+                assert (false);
+            };
         };
         return result;
     };
@@ -30,8 +28,7 @@ module {
     public func subText(value : Text, indexStart : Nat, indexEnd : Nat) : Text {
         if (indexStart == 0 and indexEnd >= value.size()) {
             return value;
-        }
-        else if (indexStart >= value.size()) {
+        } else if (indexStart >= value.size()) {
             return "";
         };
 
@@ -49,7 +46,7 @@ module {
         result;
     };
 
-    public func scan(cmacs: [Text], url : Text, scan_count : Nat) : Nat {
+    public func scan(cmacs : [Text], url : Text, scan_count : Nat) : Nat {
         let full_query = Iter.toArray(Text.split(url, #char '?'));
         if (full_query.size() != 2) {
             return 0;
@@ -62,7 +59,7 @@ module {
         // };
 
         if (queries.size() != 3 and queries.size() != 4) {
-             return 0;
+            return 0;
         };
 
         let cmac_query = Iter.toArray(Text.split(queries[2], #char '='));
@@ -74,9 +71,17 @@ module {
 
         var counter = hexToNat(counter_query[1]);
 
-        let sha = Sha.sha256(Array.map(Text.toArray(cmac_query[1]), func (c : Char) : Nat8 {
-            Nat8.fromNat(Nat32.toNat(Char.toNat32(c)))
-        }));
+        let sha = Blob.toArray(
+            Sha256.fromArray(
+                #sha256,
+                Array.map(
+                    Text.toArray(cmac_query[1]),
+                    func(c : Char) : Nat8 {
+                        Nat8.fromNat(Nat32.toNat(Char.toNat32(c)));
+                    },
+                ),
+            )
+        );
 
         if (counter >= cmacs.size() or counter <= scan_count) {
             return 0;
@@ -99,9 +104,9 @@ module {
         if (queries.size() == 0) return null;
         let uid_query = Iter.toArray(Text.split(queries[0], #char '='));
         if (uid_query.size() == 2 and uid_query[0] == "uid") {
-            ?uid_query[1]
+            ?uid_query[1];
         } else {
-            null
-        }
+            null;
+        };
     };
-}
+};

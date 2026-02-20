@@ -11,7 +11,7 @@ import Nat8 "mo:core/Nat8";
 import Char "mo:core/Char";
 import Collection "collection";
 import Time "mo:core/Time";
-import Sha "utils/sha";
+import Sha256 "mo:sha2/Sha256";
 import Int "mo:core/Int";
 import Blob "mo:core/Blob";
 import Theme "utils/theme";
@@ -409,12 +409,15 @@ module {
 
             // Generate signature: Hash(filename + timestamp + secret)
             let input = filename # timestamp # secret;
-            let sha = Sha.sha256(
-                Array.map(
-                    Text.toArray(input),
-                    func(c : Char) : Nat8 {
-                        Nat8.fromNat(Nat32.toNat(Char.toNat32(c)));
-                    },
+            let sha = Blob.toArray(
+                Sha256.fromArray(
+                    #sha256,
+                    Array.map(
+                        Text.toArray(input),
+                        func(c : Char) : Nat8 {
+                            Nat8.fromNat(Nat32.toNat(Char.toNat32(c)));
+                        },
+                    ),
                 )
             );
 
@@ -454,12 +457,15 @@ module {
             // 2. Verify signature
             // Reconstruct input using the EXPECTED filename
             let input = expectedFilename # timestampText # secret;
-            let sha = Sha.sha256(
-                Array.map(
-                    Text.toArray(input),
-                    func(c : Char) : Nat8 {
-                        Nat8.fromNat(Nat32.toNat(Char.toNat32(c)));
-                    },
+            let sha = Blob.toArray(
+                Sha256.fromArray(
+                    #sha256,
+                    Array.map(
+                        Text.toArray(input),
+                        func(c : Char) : Nat8 {
+                            Nat8.fromNat(Nat32.toNat(Char.toNat32(c)));
+                        },
+                    ),
                 )
             );
 
