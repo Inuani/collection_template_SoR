@@ -377,14 +377,14 @@ module {
             Your browser does not support the audio element.
         </audio>
         <div class=\"timer-container\">
-            Access expires in: <span id=\"timer\">60</span>s
+            Access expires in: <span id=\"timer\">120</span>s
         </div>
         <div class=\"status\">Secure Stream Active</div>
     </div>
 
     <script>
         // Simple countdown timer
-        let timeLeft = 60;
+        let timeLeft = 120;
         const timerElement = document.getElementById('timer');
 
         const countdown = setInterval(() => {
