@@ -10,7 +10,6 @@ import SessionMiddleware "mo:liminal/Middleware/Session";
 import ProtectedRoutes "../nfc_protec_routes";
 import Scan "../utils/scan";
 import InvalidScan "../utils/invalid_scan";
-import Theme "../utils/theme";
 import Files "../files";
 
 module NFCMiddleware {
@@ -179,7 +178,6 @@ module NFCMiddleware {
 
     public func createNFCProtectionMiddleware(
         protected_routes_storage : ProtectedRoutes.RoutesStorage,
-        themeManager : Theme.ThemeManager,
         file_storage : Files.FileStorage,
     ) : App.Middleware {
         {
@@ -208,7 +206,7 @@ module NFCMiddleware {
                                         return {
                                             statusCode = 403;
                                             headers = [("Content-Type", "text/html")];
-                                            body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage(themeManager));
+                                            body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage());
                                             streamingStrategy = null;
                                         };
                                     };
@@ -342,7 +340,7 @@ module NFCMiddleware {
                                                 return {
                                                     statusCode = 403;
                                                     headers = [("Content-Type", "text/html")];
-                                                    body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage(themeManager));
+                                                    body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage());
                                                     streamingStrategy = null;
                                                 };
                                             } else {
@@ -350,7 +348,7 @@ module NFCMiddleware {
                                                 let newToken = file_storage.generateToken(filename);
                                                 // let redirectUrl = pathOnly # "?token=" # newToken;
 
-                                                let html = file_storage.generateHTMLWrapper(filename, newToken, themeManager);
+                                                let html = file_storage.generateHTMLWrapper(filename, newToken);
 
                                                 return {
                                                     statusCode = 200;

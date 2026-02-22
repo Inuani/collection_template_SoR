@@ -38,8 +38,8 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     let collectionState = Collection.init();
     transient let collection = Collection.Collection(collectionState);
 
+    // DORMANT STABLE VARIABLE: Preserved exclusively to satisfy Motoko M0169 compatibility checks
     let themeState = Theme.init();
-    transient let themeManager = Theme.ThemeManager(themeState);
 
     let buttonsState = Buttons.init();
     transient let buttonsManager = Buttons.ButtonsManager(buttonsState);
@@ -111,13 +111,12 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
         middleware = [
             CORSMiddleware.createCORSMiddleware(),
             SessionMiddleware.new(sessionConfig),
-            NFCMiddleware.createNFCProtectionMiddleware(protected_routes_storage, themeManager, file_storage),
+            NFCMiddleware.createNFCProtectionMiddleware(protected_routes_storage, file_storage),
             RouterMiddleware.new(
                 Routes.routerConfig(
                     Principal.toText(canisterId),
                     streamingCallback,
                     collection,
-                    themeManager,
                     file_storage,
                     buttonsManager,
                 )
@@ -432,24 +431,6 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     // ============================================
     // THEME MANAGEMENT FUNCTIONS (Admin Only)
-    // ============================================
-
-    public shared ({ caller }) func setTheme(primary : Text, secondary : Text) : async Theme.Theme {
-        assert (caller == initializer);
-        themeManager.setTheme(primary, secondary);
-    };
-
-    public query func getTheme() : async Theme.Theme {
-        themeManager.getTheme();
-    };
-
-    public shared ({ caller }) func resetTheme() : async Theme.Theme {
-        assert (caller == initializer);
-        themeManager.resetTheme();
-    };
-
-    // ============================================
-    // BUTTONS MANAGEMENT FUNCTIONS (Admin Only)
     // ============================================
 
     public shared ({ caller }) func addButton(buttonText : Text, buttonLink : Text) : async Nat {

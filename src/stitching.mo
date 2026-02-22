@@ -2,16 +2,12 @@ import Text "mo:core/Text";
 import Nat "mo:core/Nat";
 import Array "mo:core/Array";
 import Collection "collection";
-import Theme "utils/theme";
 
 module {
 
     // Generate error page for stitching issues
     public func generateStitchingErrorPage(
-        errorMessage: Text,
-        themeManager: Theme.ThemeManager
-    ) : Text {
-        let primary = themeManager.getPrimary();
+        errorMessage: Text) : Text {
 
         "<!DOCTYPE html>
 <html lang=\"fr\">
@@ -19,6 +15,7 @@ module {
     <meta charset=\"UTF-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
     <title>Erreur de Stitching</title>
+    <link rel=\"stylesheet\" href=\"/theme.css\">
     <style>
         * {
             margin: 0;
@@ -73,7 +70,7 @@ module {
             font-size: 1rem;
             font-weight: 600;
             cursor: pointer;
-            background: " # primary # ";
+            background: var(--primary);
             color: white;
             text-decoration: none;
             display: inline-block;
@@ -107,10 +104,7 @@ module {
         item: Collection.Item,
         itemsInSession: [Nat],
         stitchingStartTime: Text,
-        finalizeToken: Text,
-        themeManager: Theme.ThemeManager
-    ) : Text {
-        let primary = themeManager.getPrimary();
+        finalizeToken: Text) : Text {
 
         "<!DOCTYPE html>
 <html lang=\"fr\">
@@ -118,6 +112,7 @@ module {
     <meta charset=\"UTF-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
     <title>Stitching Démarrée - En Attente</title>
+    <link rel=\"stylesheet\" href=\"/theme.css\">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -149,7 +144,7 @@ module {
             height: 60px;
             margin: 2rem auto;
             border: 4px solid #e5e7eb;
-            border-top-color: " # primary # ";
+            border-top-color: var(--primary);
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
@@ -160,7 +155,7 @@ module {
         .countdown {
             font-size: 2.5rem;
             font-weight: 700;
-            color: " # primary # ";
+            color: var(--primary);
             margin: 1rem 0;
         }
         .countdown-label {
@@ -171,7 +166,7 @@ module {
         .countdown-small {
             font-size: 1.5rem;
             font-weight: 700;
-            color: " # primary # ";
+            color: var(--primary);
             margin: 1rem 0 0.5rem 0;
         }
         .countdown-label-small {
@@ -281,10 +276,7 @@ module {
         itemsInSession: [Nat],
         allItems: [Collection.Item],
         stitchingStartTime: Text,
-        finalizeToken: Text,
-        themeManager: Theme.ThemeManager
-    ) : Text {
-        let primary = themeManager.getPrimary();
+        finalizeToken: Text) : Text {
 
         // Generate list of scanned items
         var itemsHtml = "";
@@ -293,7 +285,7 @@ module {
             switch (itemOpt) {
                 case (?item) {
                     itemsHtml #= "<div class=\"item-entry\">
-                        <div class=\"item-icon\" style=\"background: " # primary # "; color: white; display: flex; align-items: center; justify-content: center; font-weight: 700;\">" # Nat.toText(item.id) # "</div>
+                        <div class=\"item-icon\" style=\"background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700;\">" # Nat.toText(item.id) # "</div>
                         <div class=\"item-info\">
                             <div class=\"item-name\">" # item.name # "</div>
                             <div style=\"color: #6b7280; font-size: 0.9rem;\">Prêt à recevoir 10 jetons</div>
@@ -310,6 +302,7 @@ module {
     <meta charset=\"UTF-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
     <title>Stitching Active</title>
+    <link rel=\"stylesheet\" href=\"/theme.css\">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -338,7 +331,7 @@ module {
         .countdown {
             font-size: 2.5rem;
             font-weight: 700;
-            color: " # primary # ";
+            color: var(--primary);
             margin: 1rem 0;
         }
         .countdown-label {
@@ -361,7 +354,7 @@ module {
             padding: 1rem;
             margin-bottom: 0.75rem;
             border-radius: 10px;
-            border-left: 4px solid " # primary # ";
+            border-left: 4px solid var(--primary);
             display: flex;
             align-items: center;
             gap: 1rem;
@@ -405,7 +398,7 @@ module {
             transition: opacity 0.2s;
         }
         .btn-primary {
-            background: " # primary # ";
+            background: var(--primary);
             color: white;
         }
         .btn-primary:hover {
@@ -495,11 +488,7 @@ module {
     // NEW: Generate success page (session-based, simpler)
     public func generateSessionSuccessPage(
         itemIds: [Nat],
-        allItems: [Collection.Item],
-        themeManager: Theme.ThemeManager
-    ) : Text {
-        let primary = themeManager.getPrimary();
-        let secondary = themeManager.getSecondary();
+        allItems: [Collection.Item]) : Text {
 
         // Generate list of rewarded items
         var itemsHtml = "";
@@ -508,7 +497,7 @@ module {
             switch (itemOpt) {
                 case (?item) {
                     itemsHtml #= "<div class=\"item-entry\">
-                        <div class=\"item-icon\" style=\"background: " # primary # "; color: white; display: flex; align-items: center; justify-content: center; font-weight: 700;\">" # Nat.toText(item.id) # "</div>
+                        <div class=\"item-icon\" style=\"background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700;\">" # Nat.toText(item.id) # "</div>
                         <div class=\"item-info\">
                             <div class=\"item-name\">" # item.name # "</div>
                             <div class=\"item-tokens\">+10 Jetons</div>
@@ -525,6 +514,7 @@ module {
     <meta charset=\"UTF-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
     <title>Stitching Réussie !</title>
+    <link rel=\"stylesheet\" href=\"/theme.css\">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -563,7 +553,7 @@ module {
         .reward-badge {
             display: inline-block;
             padding: 1rem 2rem;
-            background: " # primary # ";
+            background: var(--primary);
             color: white;
             border-radius: 50px;
             font-size: 1.5rem;
@@ -584,7 +574,7 @@ module {
             padding: 1rem;
             margin-bottom: 0.75rem;
             border-radius: 10px;
-            border-left: 4px solid " # primary # ";
+            border-left: 4px solid var(--primary);
             display: flex;
             align-items: center;
             gap: 1rem;
@@ -598,7 +588,7 @@ module {
         }
         .item-info { flex: 1; }
         .item-name { font-weight: 600; color: #1f2937; margin-bottom: 0.25rem; }
-        .item-tokens { color: " # secondary # "; font-weight: 700; }
+        .item-tokens { color: var(--secondary); font-weight: 700; }
         .actions {
             display: flex;
             gap: 1rem;
@@ -617,7 +607,7 @@ module {
             transition: opacity 0.2s;
         }
         .btn-primary {
-            background: " # primary # ";
+            background: var(--primary);
             color: white;
         }
         .btn-primary:hover {

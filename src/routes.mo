@@ -10,7 +10,6 @@ import Iter "mo:core/Iter";
 import Collection "collection";
 import CollectionView "collection_view";
 import Home "home";
-import Theme "utils/theme";
 import Files "files";
 import Buttons "utils/buttons";
 import StitchingRoutes "stitching_routes";
@@ -26,7 +25,6 @@ module Routes {
         canisterId : Text,
         streamingCallback : shared query (Blob) -> async StreamingCallbackResponse,
         collection : Collection.Collection,
-        themeManager : Theme.ThemeManager,
         fileStorage : Files.FileStorage,
         buttonsManager : Buttons.ButtonsManager,
     ) : Router.Config {
@@ -39,7 +37,7 @@ module Routes {
                         "/",
                         #query_(
                             func(ctx : RouteContext.RouteContext) : Liminal.HttpResponse {
-                                Home.homePage(ctx, canisterId, collection.getCollectionName(), themeManager, buttonsManager.getAllButtons());
+                                Home.homePage(ctx, canisterId, collection.getCollectionName(), buttonsManager.getAllButtons());
                             }
                         ),
                     ),
@@ -52,12 +50,12 @@ module Routes {
                                 let id = switch (Nat.fromText(idText)) {
                                     case (?num) num;
                                     case null {
-                                        let html = CollectionView.generateNotFoundPage(0, themeManager);
+                                        let html = CollectionView.generateNotFoundPage(0);
                                         return ctx.buildResponse(#notFound, #html(html));
                                     };
                                 };
 
-                                let html = CollectionView.generateItemPage(collection, id, themeManager);
+                                let html = CollectionView.generateItemPage(collection, id);
                                 ctx.buildResponse(#ok, #html(html));
                             }
                         ),
@@ -66,7 +64,7 @@ module Routes {
                         "/collection",
                         #query_(
                             func(ctx : RouteContext.RouteContext) : Liminal.HttpResponse {
-                                let html = CollectionView.generateCollectionPage(collection, themeManager);
+                                let html = CollectionView.generateCollectionPage(collection);
                                 ctx.buildResponse(#ok, #html(html));
                             }
                         ),
@@ -81,12 +79,12 @@ module Routes {
                                 let id = switch (Nat.fromText(idText)) {
                                     case (?num) num;
                                     case null {
-                                        let html = CollectionView.generateNotFoundPage(0, themeManager);
+                                        let html = CollectionView.generateNotFoundPage(0);
                                         return ctx.buildResponse(#notFound, #html(html));
                                     };
                                 };
 
-                                let html = CollectionView.generateItemPage(collection, id, themeManager);
+                                let html = CollectionView.generateItemPage(collection, id);
                                 ctx.buildResponse(#ok, #html(html));
                             }
                         ),
@@ -95,7 +93,7 @@ module Routes {
                 ],
 
                 // Stitching routes (extracted to separate module)
-                StitchingRoutes.getStitchingRoutes(collection, themeManager),
+                StitchingRoutes.getStitchingRoutes(collection),
 
                 [
 
@@ -183,14 +181,6 @@ module Routes {
                         ),
                     ),
 
-                    Router.get(
-                        "/{path}",
-                        #query_(
-                            func(ctx) : Liminal.HttpResponse {
-                                ctx.buildResponse(#notFound, #error(#message("Not found")));
-                            }
-                        ),
-                    ),
                 ],
             ]);
         };
