@@ -183,7 +183,7 @@ module NFCMiddleware {
         {
             name = "NFC Protection with Session-Based Stitchings";
             handleQuery = func(context : HttpContext.HttpContext, next : App.Next) : App.QueryResult {
-                if (protected_routes_storage.isProtectedRoute(context.request.url) or Text.startsWith(context.request.url, #text "/api/stream/")) {
+                if (protected_routes_storage.isProtectedRoute(context.request.url)) {
                     return #upgrade; // Force verification in update call
                 };
                 next();
