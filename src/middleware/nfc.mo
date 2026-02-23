@@ -307,56 +307,70 @@ module NFCMiddleware {
                                     let pathSegments = Iter.toArray(Text.split(pathOnly, #char '/'));
                                     let filename = if (pathSegments.size() > 0) pathSegments[pathSegments.size() - 1] else "";
 
-                                    // 2. Check for access token
-                                    var token : ?Text = null;
-                                    let queries = Iter.toArray(Text.split(url, #char '?'));
-                                    if (queries.size() >= 2) {
-                                        let params = Iter.toArray(Text.split(queries[1], #char '&'));
-                                        for (param in params.vals()) {
-                                            let keyValue = Iter.toArray(Text.split(param, #char '='));
-                                            if (keyValue.size() == 2 and keyValue[0] == "token") {
-                                                token := ?keyValue[1];
-                                            };
-                                        };
-                                    };
-
-                                    switch (token) {
-                                        case (?t) {
-                                            // Validate Token
-                                            // If valid, we do nothing and let it fall through to next()
-                                            if (not file_storage.validateToken(t, filename)) {
-                                                return {
-                                                    statusCode = 403;
-                                                    headers = [("Content-Type", "text/plain")];
-                                                    body = ?Text.encodeUtf8("Invalid or expired token");
-                                                    streamingStrategy = null;
+                                    if (Text.startsWith(pathOnly, #text "/files/")) {
+                                        // 2. Audio File logic - Check for access token
+                                        var token : ?Text = null;
+                                        let queries = Iter.toArray(Text.split(url, #char '?'));
+                                        if (queries.size() >= 2) {
+                                            let params = Iter.toArray(Text.split(queries[1], #char '&'));
+                                            for (param in params.vals()) {
+                                                let keyValue = Iter.toArray(Text.split(param, #char '='));
+                                                if (keyValue.size() == 2 and keyValue[0] == "token") {
+                                                    token := ?keyValue[1];
                                                 };
                                             };
                                         };
-                                        case null {
-                                            // No token. Must be NFC scan.
-                                            // Verify NFC (Consumes Counter)
-                                            if (not protected_routes_storage.verifyRouteAccess(path, url)) {
-                                                return {
-                                                    statusCode = 403;
-                                                    headers = [("Content-Type", "text/html")];
-                                                    body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage());
-                                                    streamingStrategy = null;
-                                                };
-                                            } else {
-                                                // NFC Valid! Generate Token and Redirect.
-                                                let newToken = file_storage.generateToken(filename);
-                                                // let redirectUrl = pathOnly # "?token=" # newToken;
 
-                                                let html = file_storage.generateHTMLWrapper(filename, newToken);
-
-                                                return {
-                                                    statusCode = 200;
-                                                    headers = [("Content-Type", "text/html")];
-                                                    body = ?Text.encodeUtf8(html);
-                                                    streamingStrategy = null;
+                                        switch (token) {
+                                            case (?t) {
+                                                // Validate Token
+                                                // If valid, we do nothing and let it fall through to next()
+                                                if (not file_storage.validateToken(t, filename)) {
+                                                    return {
+                                                        statusCode = 403;
+                                                        headers = [("Content-Type", "text/plain")];
+                                                        body = ?Text.encodeUtf8("Invalid or expired token");
+                                                        streamingStrategy = null;
+                                                    };
                                                 };
                                             };
+                                            case null {
+                                                // No token. Must be NFC scan.
+                                                // Verify NFC (Consumes Counter)
+                                                if (not protected_routes_storage.verifyRouteAccess(path, url)) {
+                                                    return {
+                                                        statusCode = 403;
+                                                        headers = [("Content-Type", "text/html")];
+                                                        body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage());
+                                                        streamingStrategy = null;
+                                                    };
+                                                } else {
+                                                    // NFC Valid! Generate Token and Redirect.
+                                                    let newToken = file_storage.generateToken(filename);
+                                                    let html = file_storage.generateHTMLWrapper(filename, newToken);
+
+                                                    return {
+                                                        statusCode = 200;
+                                                        headers = [("Content-Type", "text/html")];
+                                                        body = ?Text.encodeUtf8(html);
+                                                        streamingStrategy = null;
+                                                    };
+                                                };
+                                            };
+                                        };
+                                    } else {
+                                        // Generic route (like /item/1)
+                                        if (not protected_routes_storage.verifyRouteAccess(path, url)) {
+                                            return {
+                                                statusCode = 403;
+                                                headers = [("Content-Type", "text/html")];
+                                                body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage());
+                                                streamingStrategy = null;
+                                            };
+                                        } else {
+                                            // NFC Valid!
+                                            // The counter is consumed. Let the router handle the page normally!
+                                            return await* next();
                                         };
                                     };
                                 };
