@@ -89,7 +89,7 @@ module {
         # "            <h1 class=\"item-title\">" # item.name # "</h1>\n"
         # "            <div class=\"item-id\">Item #" # Nat.toText(item.id) # "</div>\n"
         # "        </div>\n"
-        # "        <img src=\"/" # item.imageUrl # "\" alt=\"" # item.name # "\" class=\"item-image\">\n"
+        # "        <img src=\"" # item.imageUrl # "\" alt=\"" # item.name # "\" class=\"item-image\">\n"
         # "        <div class=\"item-rarity " # rarityClass # "\">" # item.rarity # "</div>\n"
         # "        <p class=\"item-description\">" # item.description # "</p>\n"
         # "        <div class=\"stats\">\n"
