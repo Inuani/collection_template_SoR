@@ -33,18 +33,38 @@ assert (not Scan.validateCmac([firstHash], "not-a-cmac", 1, 0));
 
 let routes = ProtectedRoutes.RoutesStorage({ var protected_routes = [] });
 assert (routes.addProtectedRoute("nfc/item/0"));
+assert (ProtectedRoutes.canonicalRoutePath(" /nfc/item/0/ ") == ?"nfc/item/0");
+assert (ProtectedRoutes.canonicalRoutePath("nfc//item/0") == null);
+assert (ProtectedRoutes.canonicalRoutePath("nfc/item/../0") == null);
+assert (ProtectedRoutes.canonicalRoutePath("nfc/item/0?uid=X") == null);
+assert (ProtectedRoutes.canonicalRoutePath("nfc/itém/0") == null);
+assert (ProtectedRoutes.itemRoute(0) == "nfc/item/0");
+assert (not routes.addProtectedRoute("/nfc/item/0/"));
+assert (routes.hasProtectedRoute("/nfc/item/0/"));
 assert (routes.isProtectedRoute("/nfc/item/0?uid=X"));
+assert (routes.isProtectedRoute("/nfc/item/0/?uid=X"));
 assert (not routes.isProtectedRoute("/item/0"));
 assert (not routes.isProtectedRoute("/nfc/item/00?uid=X"));
 assert (not routes.isProtectedRoute("/prefix/nfc/item/0?uid=X"));
 
 assert (routes.updateRouteCmacs("nfc/item/0", "04958CAA5E5E80", [firstHash]));
+assert (routes.getRouteCmacs("/nfc/item/0/", "04958CAA5E5E80") == [firstHash]);
 let physicalScan : ProtectedRoutes.PhysicalScanAttempt = {
     path = "nfc/item/0";
     uid = "04958CAA5E5E80";
     counter = 1;
     cmac = "8252B9CD8D6A36F9";
 };
+assert (routes.validatePhysicalScan(physicalScan));
+
+let equivalentPathScan : ProtectedRoutes.PhysicalScanAttempt = {
+    path = "/nfc/item/0/";
+    uid = physicalScan.uid;
+    counter = physicalScan.counter;
+    cmac = physicalScan.cmac;
+};
+// Canonical aliases cannot submit the same physical tag twice in one batch.
+assert (not routes.commitPhysicalScans([physicalScan, equivalentPathScan]));
 assert (routes.validatePhysicalScan(physicalScan));
 
 // Validation is pure; only the explicit batch commit consumes the counter.

@@ -66,17 +66,20 @@ est connue. `NFC_RANDOM_KEY=1` génère une clé privée et la sauvegarde dans
 `~/.local/share/evorev/nfc-keys/`, mais ne doit être utilisé qu'après validation
 du workflow de reprise.
 
-## Choisir les paths
+## Paths des images et entrée NFC
 
 Ces trois valeurs sont indépendantes :
 
-- `NFC_ROUTE` : URL permanente écrite sur la puce ;
+- l'entrée NFC : URL permanente écrite sur la puce ;
 - `thumbnailUrl` : miniature de l'objet ;
 - `imageUrl` : image principale de l'objet.
 
-Le path NFC dédié est `nfc/item/<id>`. Après validation du CMAC, il redirige
-vers la page publique `item/<id>`, qui reste accessible depuis la Collection et
-les historiques de Stitch. Exemple :
+Knitwork V1 dérive obligatoirement l'entrée `nfc/item/<id>` et le paramètre
+signé `item_id=<id>` depuis l'Item. Le programmeur refuse une valeur différente,
+car elle pourrait ouvrir une page mais ne serait pas acceptée par le protocole
+de Stitch physique. Après validation du CMAC, cette entrée redirige vers la page
+publique `item/<id>`, qui reste accessible depuis la Collection et les
+historiques de Stitch. Exemple :
 
 ```bash
 make nfc-plan NFC_COLLECTION=collection_bleu NFC_ITEM_ID=0 NFC_ROUTE=nfc/item/0
@@ -99,11 +102,16 @@ la commande `nfc-plan` correspondante. La description est facultative, les
 attributs sont ignorés par défaut et la rareté vaut `Unique` si elle est laissée
 vide.
 
+Une pièce ne peut plus être supprimée tant que sa route NFC existe ou qu'un
+historique de Stitch lui est associé. Cette protection évite de conserver une
+puce ou un historique pointant vers un Item absent ; une remise à zéro complète
+reste une opération explicite par `reinstall`.
+
 Puis prévisualiser et programmer sa puce :
 
 ```bash
-make nfc-plan NFC_COLLECTION=collection_bleu NFC_ITEM_ID=<ID_RETOURNE>
-make nfc-program NFC_COLLECTION=collection_bleu NFC_ITEM_ID=<ID_RETOURNE>
+make nfc-plan NFC_COLLECTION=collection_bleu NFC_ITEM_ID=<ID_RETOURNE> NFC_NETWORK=ic
+make nfc-program NFC_COLLECTION=collection_bleu NFC_ITEM_ID=<ID_RETOURNE> NFC_NETWORK=ic
 ```
 
 Le même workflow s'applique à Heloise en sélectionnant explicitement son
@@ -150,4 +158,14 @@ un `finalize_meeting`, puis deux `confirm_meeting`.
 
 Les anciennes cibles `protect` et `protect_ic` restent disponibles, mais sont
 désormais des alias de prévisualisation uniquement. Elles ne programment plus
-une puce implicitement.
+une puce implicitement. `NFC_COLLECTION` est toujours obligatoire, et
+`NFC_ITEM_ID` l'est pour chaque opération NFC. Sans `NFC_NETWORK`, les commandes
+ciblent `local` ; un ciblage de l'IC doit donc rester visible avec
+`NFC_NETWORK=ic`.
+
+Les méthodes Candid qui exposent les tables CMAC complètes, les records de
+Stitch bruts (incluant l'identifiant interne du reader) et l'ancien stockage de
+fichiers sont réservées à l'identité qui a initialisé la Collection. Les scripts
+opérateur transmettent donc explicitement `NFC_IDENTITY` (par défaut `raygen`) ;
+un appel anonyme est rejeté. Les pages HTTP continuent d'utiliser directement
+le store interne et n'exposent que le lieu, l'heure et les objets stitchés.

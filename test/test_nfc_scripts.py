@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -11,10 +13,132 @@ SCRIPTS = PROJECT_ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import hashed_cmacs
+import batch_cmacs
+import candid_values
 import setup_route
 
 
 class NfcScriptTests(unittest.TestCase):
+    def test_item_candid_argument_escapes_operator_text(self):
+        argument = candid_values.build_item_argument(
+            ['torse "helo"', r"/images\\torse.webp", "", "ligne 1\nligne 2", "Unique"],
+            [('taille "EU"', r"M\\L")],
+        )
+        self.assertEqual(
+            argument,
+            '("torse \\"helo\\"", "/images\\\\\\\\torse.webp", "", '
+            '"ligne 1\\nligne 2", "Unique", vec {record {"taille \\"EU\\""; "M\\\\\\\\L"}})',
+        )
+
+    def test_nat_result_is_parsed_as_json_not_first_number(self):
+        self.assertEqual(candid_values.parse_nat_json('"42"'), 42)
+        self.assertEqual(candid_values.parse_nat_json("42"), 42)
+        for invalid in ('"Item 42"', '{"id":"42"}', "true", "-1"):
+            with self.assertRaises(ValueError):
+                candid_values.parse_nat_json(invalid)
+
+    def test_make_refuses_implicit_collection_and_item(self):
+        result = subprocess.run(
+            [
+                "make",
+                "--no-print-directory",
+                "nfc-plan",
+                "NFC_COLLECTION=",
+                "NFC_ITEM_ID=",
+            ],
+            cwd=PROJECT_ROOT,
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("NFC_COLLECTION is required", result.stdout + result.stderr)
+
+    def test_make_nfc_guards_do_not_require_env_or_invoke_dfx(self):
+        environment = os.environ.copy()
+        environment["PATH"] = "/usr/bin:/bin"
+        result = subprocess.run(
+            [
+                "/usr/bin/make",
+                "--no-print-directory",
+                "-f",
+                str(PROJECT_ROOT / "Makefile"),
+                "nfc-plan",
+                "NFC_COLLECTION=",
+                "NFC_ITEM_ID=",
+            ],
+            cwd=PROJECT_ROOT.parent,
+            env=environment,
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("NFC_COLLECTION is required", result.stdout + result.stderr)
+        self.assertNotIn("dfx:", result.stdout + result.stderr)
+        self.assertNotIn(".env:", result.stdout + result.stderr)
+
+    def test_live_principal_pin_is_not_applied_to_local_plan(self):
+        local = subprocess.run(
+            [
+                "make",
+                "--no-print-directory",
+                "-n",
+                "nfc-plan",
+                "NFC_COLLECTION=collection_bleu",
+                "NFC_ITEM_ID=0",
+            ],
+            cwd=PROJECT_ROOT,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
+        self.assertIn("--network local", local)
+        self.assertNotIn("--expected-canister-id", local)
+
+        live = subprocess.run(
+            [
+                "make",
+                "--no-print-directory",
+                "-n",
+                "nfc-plan",
+                "NFC_COLLECTION=collection_bleu",
+                "NFC_ITEM_ID=0",
+                "NFC_NETWORK=ic",
+            ],
+            cwd=PROJECT_ROOT,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
+        self.assertIn(
+            "--expected-canister-id ubnuj-uyaaa-aaaak-qudbq-cai",
+            live,
+        )
+
+    def test_route_normalization_matches_collection_canonical_form(self):
+        self.assertEqual(setup_route.normalize_route(" /nfc/item/7/ "), "nfc/item/7")
+        self.assertEqual(batch_cmacs.normalize_route(" /nfc/item/7/ "), "nfc/item/7")
+        with self.assertRaises(setup_route.EnrollmentError):
+            setup_route.normalize_route("nfc//item/7")
+        with self.assertRaises(ValueError):
+            batch_cmacs.normalize_route("nfc//item/7")
+        with self.assertRaises(setup_route.EnrollmentError):
+            setup_route.normalize_route("nfc/item/../7")
+        with self.assertRaises(ValueError):
+            batch_cmacs.normalize_route("nfc/item/../7")
+        with self.assertRaises(setup_route.EnrollmentError):
+            setup_route.normalize_route("nfc/item/./7")
+        with self.assertRaises(ValueError):
+            batch_cmacs.normalize_route("nfc/item/./7")
+
+    def test_knitwork_v1_route_and_item_parameter_are_not_operator_choices(self):
+        setup_route.validate_knitwork_binding(7, "nfc/item/7", ("item_id", "7"))
+        with self.assertRaisesRegex(setup_route.EnrollmentError, "requires route"):
+            setup_route.validate_knitwork_binding(7, "nfc/item/8", ("item_id", "7"))
+        with self.assertRaisesRegex(
+            setup_route.EnrollmentError, "requires the signed parameter"
+        ):
+            setup_route.validate_knitwork_binding(7, "nfc/item/7", ("item_id", "8"))
+
     def test_live_collection_aliases_resolve_to_the_expected_canisters(self) -> None:
         expected = {
             "collection_monayolla": "4623w-oqaaa-aaaak-qtrjq-cai",

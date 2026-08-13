@@ -3,6 +3,8 @@ import Map "mo:core/Map";
 import Iter "mo:core/Iter";
 import Array "mo:core/Array";
 import Option "mo:core/Option";
+import Char "mo:core/Char";
+import Nat "mo:core/Nat";
 import Scan "utils/scan";
 
 module {
@@ -35,18 +37,45 @@ module {
         var protected_routes = [];
     };
 
-    public class RoutesStorage(state : State) {
-        func normalizedRoutePath(path : Text) : Text {
-            if (Text.startsWith(path, #text "/")) path else "/" # path;
-        };
+    func isAllowedRouteCharacter(character : Char) : Bool {
+        (character >= 'a' and character <= 'z') or
+        (character >= 'A' and character <= 'Z') or
+        Char.isDigit(character) or
+        character == '/' or character == '.' or character == '_' or
+        character == '~' or character == '-';
+    };
 
+    // Protected route keys are stored without leading/trailing slashes. The
+    // public helper is also used by the enrollment scripts' matching tests and
+    // by Item lifecycle guards, so every NFC entry point uses one spelling.
+    public func canonicalRoutePath(path : Text) : ?Text {
+        let withoutOuterWhitespace = Text.trim(path, #predicate(Char.isWhitespace));
+        let canonical = Text.trim(withoutOuterWhitespace, #char('/'));
+        if (canonical == "") return null;
+        for (character in canonical.chars()) {
+            if (not isAllowedRouteCharacter(character)) return null;
+        };
+        for (segment in Text.split(canonical, #char('/'))) {
+            if (segment == "" or segment == "." or segment == "..") return null;
+        };
+        ?canonical;
+    };
+
+    public func itemRoute(itemId : Nat) : Text {
+        "nfc/item/" # Nat.toText(itemId);
+    };
+
+    public class RoutesStorage(state : State) {
         func requestPath(url : Text) : Text {
             let parts = Iter.toArray(Text.split(url, #char '?'));
             if (parts.size() == 0) "" else parts[0];
         };
 
         public func routeMatches(path : Text, url : Text) : Bool {
-            normalizedRoutePath(path) == requestPath(url);
+            switch (canonicalRoutePath(path), canonicalRoutePath(requestPath(url))) {
+                case (?configured, ?requested) { configured == requested };
+                case (_, _) { false };
+            };
         };
         
         // Helper to find tag data in the list
@@ -83,13 +112,56 @@ module {
             Text.compare,
         );
 
+        // The fallback scan keeps old, non-canonical stable keys readable. Any
+        // later mutation migrates that entry to its canonical key.
+        private func findRouteEntry(path : Text) : ?(Text, ProtectedRoute) {
+            let canonical = switch (canonicalRoutePath(path)) {
+                case null { return null };
+                case (?value) { value };
+            };
+            switch (Map.get(routes, Text.compare, canonical)) {
+                case (?route) { return ?(canonical, route) };
+                case null {};
+            };
+            for ((storedKey, route) in Map.entries(routes)) {
+                switch (canonicalRoutePath(storedKey)) {
+                    case (?storedCanonical) {
+                        if (storedCanonical == canonical) return ?(storedKey, route);
+                    };
+                    case null {};
+                };
+            };
+            null;
+        };
+
+        private func putCanonicalRoute(
+            previousKey : Text,
+            canonical : Text,
+            tags : [(Text, TagData)],
+        ) {
+            if (previousKey != canonical) {
+                ignore Map.take(routes, Text.compare, previousKey);
+            };
+            Map.add(
+                routes,
+                Text.compare,
+                canonical,
+                { path = canonical; tags },
+            );
+            updateState();
+        };
+
         public func addProtectedRoute(path : Text) : Bool {
-            if (Option.isNull(Map.get(routes, Text.compare, path))) {
+            let canonical = switch (canonicalRoutePath(path)) {
+                case null { return false };
+                case (?value) { value };
+            };
+            if (Option.isNull(findRouteEntry(canonical))) {
                 let new_route : ProtectedRoute = {
-                    path;
+                    path = canonical;
                     tags = [];
                 };
-                Map.add(routes, Text.compare, path, new_route);
+                Map.add(routes, Text.compare, canonical, new_route);
                 updateState();
                 true;
             } else {
@@ -99,8 +171,12 @@ module {
 
         // This replaces updateRouteCmacs, now specific to a tag
         public func updateRouteCmacs(path : Text, uid : Text, new_cmacs : [Text]) : Bool {
-            switch (Map.get(routes, Text.compare, path)) {
-                case (?existing) {
+            let canonical = switch (canonicalRoutePath(path)) {
+                case null { return false };
+                case (?value) { value };
+            };
+            switch (findRouteEntry(canonical)) {
+                case (?(previousKey, existing)) {
                     
                     let currentTagData = switch(findTag(existing.tags, uid)) {
                         case (?d) { d };
@@ -117,16 +193,7 @@ module {
 
                     let newTags = updateTagList(existing.tags, uid, newTagData);
 
-                    Map.add(
-                        routes,
-                        Text.compare,
-                        path,
-                        {
-                            path = existing.path;
-                            tags = newTags;
-                        },
-                    );
-                    updateState();
+                    putCanonicalRoute(previousKey, canonical, newTags);
                     true;
                 };
                 case null {
@@ -136,8 +203,12 @@ module {
         };
 
         public func appendRouteCmacs(path : Text, uid : Text, new_cmacs : [Text]) : Bool {
-            switch (Map.get(routes, Text.compare, path)) {
-                case (?existing) {
+            let canonical = switch (canonicalRoutePath(path)) {
+                case null { return false };
+                case (?value) { value };
+            };
+            switch (findRouteEntry(canonical)) {
+                case (?(previousKey, existing)) {
                      let currentTagData = switch(findTag(existing.tags, uid)) {
                         case (?d) { d };
                         case null { 
@@ -152,16 +223,7 @@ module {
 
                     let newTags = updateTagList(existing.tags, uid, newTagData);
 
-                    Map.add(
-                        routes,
-                        Text.compare,
-                        path,
-                        {
-                            path = existing.path;
-                            tags = newTags;
-                        },
-                    );
-                    updateState();
+                    putCanonicalRoute(previousKey, canonical, newTags);
                     true;
                 };
                 case null {
@@ -171,13 +233,24 @@ module {
         };
 
         public func getRoute(path : Text) : ?ProtectedRoute {
-            Map.get(routes, Text.compare, path);
+            let canonical = switch (canonicalRoutePath(path)) {
+                case null { return null };
+                case (?value) { value };
+            };
+            switch (findRouteEntry(canonical)) {
+                case null { null };
+                case (?(_, route)) { ?{ path = canonical; tags = route.tags } };
+            };
+        };
+
+        public func hasProtectedRoute(path : Text) : Bool {
+            Option.isSome(findRouteEntry(path));
         };
 
         // Returns CMACs for a specific tag
         public func getRouteCmacs(path : Text, uid : Text) : [Text] {
-            switch (Map.get(routes, Text.compare, path)) {
-                case (?route) {
+            switch (findRouteEntry(path)) {
+                case (?(_, route)) {
                     switch(findTag(route.tags, uid)) {
                         case (?data) { data.cmacs_ };
                         case null { [] };
@@ -192,9 +265,9 @@ module {
         // every scan first and commit them together only when all are valid.
         public func validatePhysicalScan(scan : PhysicalScanAttempt) : Bool {
             if (not Scan.isFixedHex(scan.uid, 14)) return false;
-            switch (Map.get(routes, Text.compare, scan.path)) {
+            switch (findRouteEntry(scan.path)) {
                 case null { false };
-                case (?route) {
+                case (?(_, route)) {
                     switch (findTag(route.tags, scan.uid)) {
                         case null { false };
                         case (?tagData) {
@@ -216,7 +289,11 @@ module {
         public func commitPhysicalScans(scans : [PhysicalScanAttempt]) : Bool {
             var seenTags : [Text] = [];
             for (scan in scans.vals()) {
-                let tagKey = scan.path # "|" # scan.uid;
+                let canonical = switch (canonicalRoutePath(scan.path)) {
+                    case null { return false };
+                    case (?value) { value };
+                };
+                let tagKey = canonical # "|" # scan.uid;
                 switch (Array.find<Text>(seenTags, func(existing) { existing == tagKey })) {
                     case (?_) { return false };
                     case null {};
@@ -236,8 +313,12 @@ module {
         };
 
         public func updateScanCount(path : Text, uid : Text, new_count : Nat) : Bool {
-             switch (Map.get(routes, Text.compare, path)) {
-                case (?existing) {
+            let canonical = switch (canonicalRoutePath(path)) {
+                case null { return false };
+                case (?value) { value };
+            };
+            switch (findRouteEntry(canonical)) {
+                case (?(previousKey, existing)) {
                     
                     switch(findTag(existing.tags, uid)) {
                         case (?currentTagData) {
@@ -246,16 +327,7 @@ module {
                                 scan_count_ = new_count;
                             };
                             let newTags = updateTagList(existing.tags, uid, newTagData);
-                            Map.add(
-                                routes,
-                                Text.compare,
-                                path,
-                                {
-                                    path = existing.path;
-                                    tags = newTags;
-                                },
-                            );
-                            updateState();
+                            putCanonicalRoute(previousKey, canonical, newTags);
                             true;
                         };
                         case null { false };
@@ -268,8 +340,8 @@ module {
         };
 
         public func verifyRouteAccess(path : Text, url : Text) : Bool {
-            switch (Map.get(routes, Text.compare, path)) {
-                case (?route) {
+            switch (findRouteEntry(path)) {
+                case (?(_, route)) {
                     // Extract UID from URL
                     let uidOpt = Scan.getUid(url);
                     switch(uidOpt) {

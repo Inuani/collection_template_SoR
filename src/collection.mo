@@ -38,6 +38,26 @@ module {
         attributes = item.attributes;
     };
 
+    public func deletionBlockReason(
+        id : Nat,
+        hasProtectedRoute : Bool,
+        hasMeetingHistory : Bool,
+    ) : ?Text {
+        if (hasProtectedRoute) {
+            return ?(
+                "Item with ID " # Nat.toText(id) #
+                " cannot be deleted while its NFC route is registered"
+            );
+        };
+        if (hasMeetingHistory) {
+            return ?(
+                "Item with ID " # Nat.toText(id) #
+                " cannot be deleted because it has Stitch history"
+            );
+        };
+        null;
+    };
+
     // State for persistence across upgrades
     public type State = {
         var items : [(Nat, Item)];

@@ -1,13 +1,14 @@
 #!/bin/bash
 
-# Usage: ./upload_file.sh <file_path> [title] [artist] [canister_name] [network]
-# Example: ./upload_file.sh logo.png "Logo" "Artist Name" collection_monayolla local
+# Usage: ./upload_file.sh <file_path> [title] [artist] [canister_name] [network] [identity]
+# Example: ./upload_file.sh logo.png "Logo" "Artist Name" collection_monayolla local raygen
 
 file=$1
 title=${2:-$(basename "$file")}
 artist=${3:-"Unknown"}
 canister=${4:-collection_monayolla}
 network=${5:-local}
+identity=${6:-raygen}
 
 if [ -z "$file" ]; then
     echo "Error: File path is required"
@@ -29,6 +30,7 @@ echo "Artist: $artist"
 echo "Content-Type: $contentType"
 echo "Canister: $canister"
 echo "Network: $network"
+echo "Identity: $identity"
 echo ""
 
 byteArray=( $(od -An -v -tuC "$file") )
@@ -45,14 +47,14 @@ do
        payload+="$byte;"
    done
    payload+="}"
-   dfx canister --network "$network" call "$canister" upload "$payload"
+   dfx canister --network "$network" --identity "$identity" call "$canister" upload "$payload"
    i=$((i + chunk_size))
    chunk=$((chunk + 1))
 done
 
 echo ""
 echo "Finalizing upload..."
-dfx canister --network "$network" call "$canister" uploadFinalize "(\"$title\", \"$artist\", \"$contentType\")"
+dfx canister --network "$network" --identity "$identity" call "$canister" uploadFinalize "(\"$title\", \"$artist\", \"$contentType\")"
 
 if [ $? -eq 0 ]; then
     echo ""

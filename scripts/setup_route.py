@@ -40,13 +40,13 @@ def run(command: list[str], project_root: Path) -> str:
 
 
 def normalize_route(value: str) -> str:
-    route = value.strip().lstrip("/")
+    route = value.strip().strip("/")
     if not route or not ROUTE_RE.fullmatch(route):
         raise EnrollmentError(
             "route must use only letters, digits, '/', '.', '_', '~' or '-'"
         )
-    if ".." in route.split("/") or "//" in route:
-        raise EnrollmentError("route cannot contain '..' or empty path segments")
+    if any(segment in {"", ".", ".."} for segment in route.split("/")):
+        raise EnrollmentError("route cannot contain '.', '..' or empty path segments")
     return route
 
 
@@ -55,6 +55,22 @@ def parse_parameter(value: str) -> tuple[str, str]:
         raise EnrollmentError("parameter must use the form key=value without spaces or '&'")
     key, parameter_value = value.split("=", 1)
     return key, parameter_value
+
+
+def validate_knitwork_binding(
+    item_id: int,
+    route: str,
+    parameter: tuple[str, str],
+) -> None:
+    expected_route = f"nfc/item/{item_id}"
+    if route != expected_route:
+        raise EnrollmentError(
+            f"Knitwork V1 requires route {expected_route!r} for Item {item_id}"
+        )
+    if parameter != ("item_id", str(item_id)):
+        raise EnrollmentError(
+            f"Knitwork V1 requires the signed parameter item_id={item_id}"
+        )
 
 
 def read_dfx_canisters(project_root: Path) -> dict[str, object]:
@@ -349,8 +365,11 @@ def main() -> int:
         if args.batch_size <= 0:
             raise EnrollmentError("batch-size must be greater than zero")
 
-        route = normalize_route(args.route or f"nfc/item/{args.item_id}")
-        parameter = parse_parameter(args.param) if args.param else None
+        expected_route = f"nfc/item/{args.item_id}"
+        route = normalize_route(args.route or expected_route)
+        expected_parameter = ("item_id", str(args.item_id))
+        parameter = parse_parameter(args.param) if args.param else expected_parameter
+        validate_knitwork_binding(args.item_id, route, parameter)
         canister_id = resolve_canister_id(
             project_root, args.canister, args.network, args.identity
         )

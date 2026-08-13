@@ -1,12 +1,13 @@
 #!/bin/bash
 
-# Usage: ./download_file.sh <title> [output_filename] [canister_name] [network]
-# Example: ./download_file.sh "Logo" logo_downloaded.png collection_monayolla local
+# Usage: ./download_file.sh <title> [output_filename] [canister_name] [network] [identity]
+# Example: ./download_file.sh "Logo" logo_downloaded.png collection_monayolla local raygen
 
 title=$1
 output=${2:-"downloaded_file"}
 canister=${3:-collection_monayolla}
 network=${4:-local}
+identity=${5:-raygen}
 
 if [ -z "$title" ]; then
     echo "Error: Title is required"
@@ -17,6 +18,7 @@ fi
 echo "Downloading file: $title"
 echo "Canister: $canister"
 echo "Network: $network"
+echo "Identity: $identity"
 echo ""
 
 # Create Python script for parsing and downloading
@@ -51,9 +53,9 @@ def parse_blob_from_candid(candid_output):
 
     return bytes(result)
 
-def get_file_metadata(canister, network, title):
+def get_file_metadata(canister, network, identity, title):
     """Get file metadata from first chunk"""
-    cmd = ['dfx', 'canister', '--network', network, 'call', canister,
+    cmd = ['dfx', 'canister', '--network', network, '--identity', identity, 'call', canister,
            'getFileChunk', f'("{title}", 0)']
 
     try:
@@ -86,9 +88,9 @@ def get_file_metadata(canister, network, title):
         print(f"✗ Error getting metadata: {e}")
         sys.exit(1)
 
-def download_chunk(canister, network, title, chunk_id):
+def download_chunk(canister, network, identity, title, chunk_id):
     """Download a specific chunk"""
-    cmd = ['dfx', 'canister', '--network', network, 'call', canister,
+    cmd = ['dfx', 'canister', '--network', network, '--identity', identity, 'call', canister,
            'getFileChunk', f'("{title}", {chunk_id})']
 
     try:
@@ -107,18 +109,19 @@ def download_chunk(canister, network, title, chunk_id):
         return None
 
 def main():
-    if len(sys.argv) < 5:
-        print("Usage: script.py <title> <output> <canister> <network>")
+    if len(sys.argv) < 6:
+        print("Usage: script.py <title> <output> <canister> <network> <identity>")
         sys.exit(1)
 
     title = sys.argv[1]
     output = sys.argv[2]
     canister = sys.argv[3]
     network = sys.argv[4]
+    identity = sys.argv[5]
 
     # Get metadata
     print("Getting file metadata...")
-    metadata = get_file_metadata(canister, network, title)
+    metadata = get_file_metadata(canister, network, identity, title)
 
     print(f"File found!")
     print(f"  Title: {title}")
@@ -137,7 +140,7 @@ def main():
             # We already have the first chunk from metadata call
             chunk_data = parse_blob_from_candid(metadata['first_chunk_output'])
         else:
-            chunk_data = download_chunk(canister, network, title, i)
+            chunk_data = download_chunk(canister, network, identity, title, i)
 
         if chunk_data is None:
             print(f"✗ Failed to download chunk {i}")
@@ -181,7 +184,7 @@ if __name__ == '__main__':
 PYTHON_SCRIPT
 
 # Run the Python script
-python3 /tmp/download_canister_file.py "$title" "$output" "$canister" "$network"
+python3 /tmp/download_canister_file.py "$title" "$output" "$canister" "$network" "$identity"
 exit_code=$?
 
 # Clean up

@@ -14,6 +14,16 @@ from typing import Sequence
 
 HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 UID_RE = re.compile(r"^[0-9A-F]{14}$")
+ROUTE_RE = re.compile(r"^[A-Za-z0-9/._~-]+$")
+
+
+def normalize_route(value: str) -> str:
+    route = value.strip().strip("/")
+    if not route or not ROUTE_RE.fullmatch(route):
+        raise ValueError("route contains unsupported characters")
+    if any(segment in {"", ".", ".."} for segment in route.split("/")):
+        raise ValueError("route contains an invalid path segment")
+    return route
 
 
 def candid_text(value: str) -> str:
@@ -148,11 +158,12 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
     project_root = Path(__file__).resolve().parents[1]
-    route = args.route.strip().lstrip("/")
+    try:
+        route = normalize_route(args.route)
+    except ValueError as exc:
+        parser.error(str(exc))
     uid = args.uid.strip().upper()
 
-    if not route or "?" in route or "#" in route:
-        parser.error("route must be non-empty and cannot contain a query or fragment")
     if not UID_RE.fullmatch(uid):
         parser.error("UID must contain exactly 14 hexadecimal characters")
     if args.batch_size <= 0:

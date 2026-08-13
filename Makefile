@@ -2,21 +2,21 @@
 
 # icx-asset --replica http://127.0.0.1:4943 --pem ~/.config/dfx/identity/raygen/identity.pem sync $(dfx canister id liminal) ./public
 
-include .env
+-include .env
 
 REPLICA_URL := $(if $(filter ic,$(subst ',,$(DFX_NETWORK))),https://ic0.app,http://127.0.0.1:4943)
-CANISTER_NAME := $(shell grep "CANISTER_ID_" .env | grep -v "INTERNET_IDENTITY\|CANISTER_ID='" | head -1 | sed 's/CANISTER_ID_\([^=]*\)=.*/\1/' | tr '[:upper:]' '[:lower:]')
+CANISTER_NAME := $(shell test -f .env && grep "CANISTER_ID_" .env | grep -v "INTERNET_IDENTITY\|CANISTER_ID='" | head -1 | sed 's/CANISTER_ID_\([^=]*\)=.*/\1/' | tr '[:upper:]' '[:lower:]')
 CANISTER_ID := $(CANISTER_ID_$(shell echo $(CANISTER_NAME) | tr '[:lower:]' '[:upper:]'))
-IC_CANISTER_ID := $(shell dfx canister id $(CANISTER_NAME) --ic)
+IC_CANISTER_ID = $(shell dfx canister id $(CANISTER_NAME) --ic)
 CMAC_COUNT ?= 20000
 
 # NFC enrollment always targets one explicit Collection. These variables are
 # deliberately independent from CANISTER_NAME, which may still be used by the
 # older local-development targets below.
-NFC_COLLECTION ?= collection_bleu
-NFC_ITEM_ID ?= 0
+NFC_COLLECTION ?=
+NFC_ITEM_ID ?=
 NFC_ROUTE ?= nfc/item/$(NFC_ITEM_ID)
-NFC_NETWORK ?= ic
+NFC_NETWORK ?= local
 NFC_IDENTITY ?= raygen
 NFC_CMAC_COUNT ?= $(CMAC_COUNT)
 NFC_BATCH_SIZE ?= 1000
@@ -29,7 +29,9 @@ NFC_EXPECTED_CANISTER_ID_collection_bleu := ubnuj-uyaaa-aaaak-qudbq-cai
 NFC_EXPECTED_CANISTER_ID_collection_heloise := jmp6g-oqaaa-aaaak-qug3q-cai
 NFC_EXPECTED_CANISTER_ID ?= $(NFC_EXPECTED_CANISTER_ID_$(NFC_COLLECTION))
 NFC_KEY_ARGS = $(if $(filter 1 yes true,$(NFC_RANDOM_KEY)),--random-key,)
-NFC_EXPECTED_ARGS = $(if $(strip $(NFC_EXPECTED_CANISTER_ID)),--expected-canister-id $(NFC_EXPECTED_CANISTER_ID),)
+# Live aliases are pinned to their known IC Principals. Local canisters receive
+# different ephemeral Principals, so the live allowlist must not be applied.
+NFC_EXPECTED_ARGS = $(if $(filter ic,$(NFC_NETWORK)),$(if $(strip $(NFC_EXPECTED_CANISTER_ID)),--expected-canister-id $(NFC_EXPECTED_CANISTER_ID),),)
 NFC_ARGS = --canister $(NFC_COLLECTION) --item-id $(NFC_ITEM_ID) --route $(NFC_ROUTE) --network $(NFC_NETWORK) --identity $(NFC_IDENTITY) --cmac-count $(NFC_CMAC_COUNT) --batch-size $(NFC_BATCH_SIZE) --param $(NFC_PARAM) $(NFC_KEY_ARGS) $(NFC_EXPECTED_ARGS)
 
 UNAME := $(shell uname)
@@ -61,20 +63,32 @@ sync:
 Isync:
 	icx-asset --replica https://ic0.app --pem ~/.config/dfx/identity/raygen/identity.pem sync $(CANISTER_ID) ./public
 
-.PHONY: item-add nfc-plan nfc-program protect protect_ic
+.PHONY: require-nfc-collection require-nfc-item item-add nfc-plan nfc-program protect protect_ic
+
+require-nfc-collection:
+	@test -n "$(strip $(NFC_COLLECTION))" || { \
+		echo "Error: NFC_COLLECTION is required (for example collection_bleu)"; \
+		exit 2; \
+	}
+
+require-nfc-item:
+	@test -n "$(strip $(NFC_ITEM_ID))" || { \
+		echo "Error: NFC_ITEM_ID is required"; \
+		exit 2; \
+	}
 
 # Interactively creates an Item in the explicitly selected Collection.
 # The canister assigns the Item ID; the script prints the matching NFC command.
-item-add:
+item-add: require-nfc-collection
 	./scripts/add_item.sh $(NFC_COLLECTION) $(NFC_NETWORK) $(NFC_IDENTITY)
 
 # Safe preflight only: no reader, tag or canister state is modified.
-nfc-plan:
+nfc-plan: require-nfc-collection require-nfc-item
 	python3 scripts/setup_route.py $(NFC_ARGS)
 
 # Explicit hardware/on-chain execution. The script displays the resolved
 # Collection, Item, Principal and path, then requires a `y` confirmation.
-nfc-program:
+nfc-program: require-nfc-collection require-nfc-item
 	python3 scripts/setup_route.py $(NFC_ARGS) --execute
 
 # Backward-compatible names. Both are intentionally plan-only now.
