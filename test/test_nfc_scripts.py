@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from pathlib import Path
 
 
-SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS = PROJECT_ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import hashed_cmacs
@@ -13,6 +15,24 @@ import setup_route
 
 
 class NfcScriptTests(unittest.TestCase):
+    def test_live_collection_aliases_resolve_to_the_expected_canisters(self) -> None:
+        expected = {
+            "collection_monayolla": "4623w-oqaaa-aaaak-qtrjq-cai",
+            "collection_bleu": "ubnuj-uyaaa-aaaak-qudbq-cai",
+            "collection_heloise": "jmp6g-oqaaa-aaaak-qug3q-cai",
+        }
+        dfx = json.loads((PROJECT_ROOT / "dfx.json").read_text())
+        canister_ids = json.loads((PROJECT_ROOT / "canister_ids.json").read_text())
+        makefile = (PROJECT_ROOT / "Makefile").read_text()
+
+        for alias, principal in expected.items():
+            self.assertEqual(dfx["canisters"][alias]["main"], "src/main.mo")
+            self.assertEqual(canister_ids[alias]["ic"], principal)
+            self.assertIn(
+                f"NFC_EXPECTED_CANISTER_ID_{alias} := {principal}",
+                makefile,
+            )
+
     def test_counter_crypto_encoding_is_little_endian(self) -> None:
         self.assertEqual(hashed_cmacs.counter_to_little_endian_hex(1), "010000")
         self.assertEqual(hashed_cmacs.counter_to_little_endian_hex(256), "000100")

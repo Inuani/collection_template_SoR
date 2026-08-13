@@ -7,6 +7,10 @@
     "collection_bleu": {
       "main": "src/main.mo",
       "type": "motoko"
+    },
+    "collection_heloise": {
+      "main": "src/main.mo",
+      "type": "motoko"
     }
   },
   "defaults": {

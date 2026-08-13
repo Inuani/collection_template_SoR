@@ -22,7 +22,12 @@ NFC_CMAC_COUNT ?= $(CMAC_COUNT)
 NFC_BATCH_SIZE ?= 1000
 NFC_RANDOM_KEY ?= 0
 NFC_PARAM ?= item_id=$(NFC_ITEM_ID)
-NFC_EXPECTED_CANISTER_ID ?= $(if $(filter collection_bleu,$(NFC_COLLECTION)),ubnuj-uyaaa-aaaak-qudbq-cai,$(if $(filter collection_monayolla,$(NFC_COLLECTION)),4623w-oqaaa-aaaak-qtrjq-cai,))
+# Keep an independent Principal allowlist for live NFC enrollment. This makes a
+# mistyped or accidentally remapped dfx alias fail before any tag/canister write.
+NFC_EXPECTED_CANISTER_ID_collection_monayolla := 4623w-oqaaa-aaaak-qtrjq-cai
+NFC_EXPECTED_CANISTER_ID_collection_bleu := ubnuj-uyaaa-aaaak-qudbq-cai
+NFC_EXPECTED_CANISTER_ID_collection_heloise := jmp6g-oqaaa-aaaak-qug3q-cai
+NFC_EXPECTED_CANISTER_ID ?= $(NFC_EXPECTED_CANISTER_ID_$(NFC_COLLECTION))
 NFC_KEY_ARGS = $(if $(filter 1 yes true,$(NFC_RANDOM_KEY)),--random-key,)
 NFC_EXPECTED_ARGS = $(if $(strip $(NFC_EXPECTED_CANISTER_ID)),--expected-canister-id $(NFC_EXPECTED_CANISTER_ID),)
 NFC_ARGS = --canister $(NFC_COLLECTION) --item-id $(NFC_ITEM_ID) --route $(NFC_ROUTE) --network $(NFC_NETWORK) --identity $(NFC_IDENTITY) --cmac-count $(NFC_CMAC_COUNT) --batch-size $(NFC_BATCH_SIZE) --param $(NFC_PARAM) $(NFC_KEY_ARGS) $(NFC_EXPECTED_ARGS)

@@ -5,13 +5,18 @@ Le programmateur USB et la station Proof-of-Meet ont deux rôles différents :
 - le programmateur D-Logic relié au PC écrit la puce NTAG 424 DNA ;
 - une station enregistrée dans le Hub lit ensuite la puce, signe le scan et l'envoie au Hub.
 
-> **Déploiement requis pour cette révision :** le dernier champ stable réservé
-> aux anciens tests a été supprimé. Le prochain déploiement de
-> `collection_monayolla` et `collection_bleu` doit donc utiliser le mode
-> `reinstall`, jamais `upgrade`. Ce reinstall remettra les données des deux
-> Collections à zéro ; les Items, routes NFC et CMAC devront ensuite être
-> réimportés. Les déploiements ultérieurs pourront de nouveau utiliser
-> `upgrade` tant que leur schéma stable reste compatible.
+Les trois alias IC actuellement déclarés utilisent exactement le même code :
+
+| Alias dfx | Principal IC |
+| --- | --- |
+| `collection_monayolla` | `4623w-oqaaa-aaaak-qtrjq-cai` |
+| `collection_bleu` | `ubnuj-uyaaa-aaaak-qudbq-cai` |
+| `collection_heloise` | `jmp6g-oqaaa-aaaak-qug3q-cai` |
+
+Un `reinstall` efface tous les Items, routes NFC, CMAC et Stitchs du canister
+ciblé. Il est réservé aux remises à zéro explicitement voulues, comme la
+reprise initiale du canister existant par `collection_heloise`. Après cette
+initialisation, utiliser `upgrade` tant que le schéma stable reste compatible.
 
 ## Préparer une puce pour Item B0
 
@@ -101,6 +106,15 @@ make nfc-plan NFC_COLLECTION=collection_bleu NFC_ITEM_ID=<ID_RETOURNE>
 make nfc-program NFC_COLLECTION=collection_bleu NFC_ITEM_ID=<ID_RETOURNE>
 ```
 
+Le même workflow s'applique à Heloise en sélectionnant explicitement son
+alias :
+
+```bash
+make item-add NFC_COLLECTION=collection_heloise NFC_NETWORK=ic
+make nfc-plan NFC_COLLECTION=collection_heloise NFC_ITEM_ID=<ID_RETOURNE> NFC_NETWORK=ic
+make nfc-program NFC_COLLECTION=collection_heloise NFC_ITEM_ID=<ID_RETOURNE> NFC_NETWORK=ic
+```
+
 ## État actuel de l'intégration Stitch
 
 Ce workflow programme le SDM, charge les preuves CMAC dans la bonne Collection
@@ -108,11 +122,12 @@ et protège l'entrée NFC dédiée avant sa redirection vers la fiche publique. 
 reader réel signe ensuite `uid`, `ctr`, `cmac`, le Principal de la Collection,
 le path, `item_id` et l'horodatage, puis envoie cette enveloppe au Hub.
 
-Le bridge physique est déployé sur le Hub, `collection_monayolla` et
-`collection_bleu`. Le Hub authentifie le reader, vérifie son statut, son lieu,
-la fraîcheur de l'enveloppe et l'inscription de la Collection. Il regroupe
-ensuite deux ou trois scans effectués par le même reader dans une fenêtre
-strictement inférieure à 10 secondes.
+Le bridge physique est déployé sur le Hub et les trois Collections
+`collection_monayolla`, `collection_bleu` et `collection_heloise`. Le Hub
+authentifie le reader, vérifie son statut, son lieu, la fraîcheur de l'enveloppe
+et l'inscription de la Collection. Il regroupe ensuite deux ou trois scans
+effectués par le même reader dans une fenêtre strictement inférieure à
+10 secondes.
 
 Le Hub transmet le `uid`, le compteur et le CMAC dans les appels existants
 `prepare_meeting` et `finalize_meeting`. Il n'existe volontairement aucun appel
@@ -128,6 +143,10 @@ session reste ouverte jusqu'à la fin de la fenêtre, avec une courte marge de
 réception. Avec trois objets, le troisième scan ferme immédiatement la session.
 La LED verte du reader indique actuellement la mise en file locale, pas encore
 la confirmation finale du Stitch ; vérifier le résultat sur les pages Item.
+
+Pour exercer le chemin maximal à cinq appels inter-canisters, scanner un objet
+de chacune des trois Collections. Le Hub effectue alors deux `prepare_meeting`,
+un `finalize_meeting`, puis deux `confirm_meeting`.
 
 Les anciennes cibles `protect` et `protect_ic` restent disponibles, mais sont
 désormais des alias de prévisualisation uniquement. Elles ne programment plus
