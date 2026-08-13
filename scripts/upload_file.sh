@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # Usage: ./upload_file.sh <file_path> [title] [artist] [canister_name] [network]
-# Example: ./upload_file.sh logo.png "Logo" "Artist Name" collection local
+# Example: ./upload_file.sh logo.png "Logo" "Artist Name" collection_monayolla local
 
 file=$1
 title=${2:-$(basename "$file")}
 artist=${3:-"Unknown"}
-canister=${4:-collection}
+canister=${4:-collection_monayolla}
 network=${5:-local}
 
 if [ -z "$file" ]; then

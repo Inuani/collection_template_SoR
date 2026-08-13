@@ -2,6 +2,23 @@
 .mops/
 public/
 .env
-canister_ids.json
 cmacs.json
 certificats/
+__pycache__/
+*.pyc
+
+# Local dependencies and native build products
+node_modules/
+reader/node_modules/
+**/build/
+
+# NFC enrollment secrets and resumable operator state
+*.pem
+*.key
+*.secret
+*.snapshot
+nfc-keys/
+artifacts/
+
+# Local-only assistant/operator instruction files
+instructions.md

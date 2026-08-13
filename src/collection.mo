@@ -4,29 +4,51 @@ import Map "mo:core/Map";
 import Iter "mo:core/Iter";
 import Array "mo:core/Array";
 import Result "mo:core/Result";
-import Time "mo:core/Time";
-import Int "mo:core/Int";
 
 module {
-    // Stitching Record Type
+    // Kept only inside stable state so upgrades can preserve the current
+    // Collection data. No public API, route or UI reads or mutates it.
     public type StitchingRecord = {
         stitching_id: Text;
-        date: Int; // timestamp
-        partner_item_ids: [Nat]; // other items in the stitching
+        date: Int;
+        partner_item_ids: [Nat];
         tokens_earned: Nat;
     };
 
-    // Collection data - you can expand this with more properties
+    // Internal stable representation. The last two fields are dormant legacy
+    // fields and are deliberately absent from PublicItem.
     public type Item = {
         id: Nat;
         name: Text;
-        thumbnailUrl: Text; // Image for collection grid
-        imageUrl: Text;     // Full-size image for detail page
+        thumbnailUrl: Text;
+        imageUrl: Text;
         description: Text;
         rarity: Text;
-        attributes: [(Text, Text)]; // key-value pairs for additional attributes
-        token_balance: Nat; // tokens earned from stitchings
-        stitching_history: [StitchingRecord]; // array of past stitchings
+        attributes: [(Text, Text)];
+        token_balance: Nat;
+        stitching_history: [StitchingRecord];
+    };
+
+    // Clean public representation used by Candid. Proof-of-Meet history is
+    // exposed separately through get_item_meetings.
+    public type PublicItem = {
+        id: Nat;
+        name: Text;
+        thumbnailUrl: Text;
+        imageUrl: Text;
+        description: Text;
+        rarity: Text;
+        attributes: [(Text, Text)];
+    };
+
+    public func toPublicItem(item : Item) : PublicItem = {
+        id = item.id;
+        name = item.name;
+        thumbnailUrl = item.thumbnailUrl;
+        imageUrl = item.imageUrl;
+        description = item.description;
+        rarity = item.rarity;
+        attributes = item.attributes;
     };
 
     // State for persistence across upgrades
@@ -166,110 +188,6 @@ module {
         public func getItemCount(): Nat {
             Map.size(items)
         };
-
-        // ============================================
-        // TOKEN MANAGEMENT
-        // ============================================
-
-
-        // Add tokens to an item's balance
-        public func addTokens(itemId: Nat, amount: Nat) : Result.Result<(), Text> {
-            switch (Map.get(items, Nat.compare, itemId)) {
-                case null {
-                    #err("Item with ID " # Nat.toText(itemId) # " not found")
-                };
-                case (?item) {
-                    let updatedItem : Item = {
-                        id = item.id;
-                        name = item.name;
-                        thumbnailUrl = item.thumbnailUrl;
-                        imageUrl = item.imageUrl;
-                        description = item.description;
-                        rarity = item.rarity;
-                        attributes = item.attributes;
-                        token_balance = item.token_balance + amount;
-                        stitching_history = item.stitching_history;
-                    };
-                    Map.add(items, Nat.compare, itemId, updatedItem);
-                    updateState();
-                    #ok()
-                };
-            };
-        };
-
-        // Record a stitching for multiple items
-        public func recordStitching(itemIds: [Nat], stitchingId: Text, tokensEarned: Nat) : Result.Result<(), Text> {
-            let timestamp = Time.now();
-
-            // Update each item with the stitching record
-            for (itemId in itemIds.vals()) {
-                switch (Map.get(items, Nat.compare, itemId)) {
-                    case null {
-                        // Skip items that don't exist
-                    };
-                    case (?item) {
-                        // Get other participants (exclude current item)
-                        let partnerIds = Array.filter<Nat>(itemIds, func(id) = id != itemId);
-
-                        // Create stitching record
-                        let stitchingRecord : StitchingRecord = {
-                            stitching_id = stitchingId;
-                            date = timestamp;
-                            partner_item_ids = partnerIds;
-                            tokens_earned = tokensEarned;
-                        };
-
-                        // Add to history
-                        let updatedHistory = Array.concat(item.stitching_history, [stitchingRecord]);
-
-                        // Update item with new history and tokens
-                        let updatedItem : Item = {
-                            id = item.id;
-                            name = item.name;
-                            thumbnailUrl = item.thumbnailUrl;
-                            imageUrl = item.imageUrl;
-                            description = item.description;
-                            rarity = item.rarity;
-                            attributes = item.attributes;
-                            token_balance = item.token_balance + tokensEarned;
-                            stitching_history = updatedHistory;
-                        };
-
-                        Map.add(items, Nat.compare, itemId, updatedItem);
-                    };
-                };
-            };
-
-            updateState();
-            #ok()
-        };
-
-        // Get item's token balance
-        public func getItemBalance(itemId: Nat) : Result.Result<Nat, Text> {
-            switch (Map.get(items, Nat.compare, itemId)) {
-                case null {
-                    #err("Item with ID " # Nat.toText(itemId) # " not found")
-                };
-                case (?item) {
-                    #ok(item.token_balance)
-                };
-            };
-        };
-
-        // Get item's stitching history
-        public func getItemStitchingHistory(itemId: Nat) : Result.Result<[StitchingRecord], Text> {
-            switch (Map.get(items, Nat.compare, itemId)) {
-                case null {
-                    #err("Item with ID " # Nat.toText(itemId) # " not found")
-                };
-                case (?item) {
-                    #ok(item.stitching_history)
-                };
-            };
-        };
-
-        // Admin function: List all active stitchings (for debugging)
-
 
         // ============================================
         // COLLECTION SETTINGS

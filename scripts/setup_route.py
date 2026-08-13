@@ -1,282 +1,495 @@
 #!/usr/bin/env python3
-import subprocess
+"""Safely enroll an NTAG 424 DNA tag for one explicit Collection route.
+
+The command is a plan-only preflight unless ``--execute`` is supplied.
+"""
+
+from __future__ import annotations
+
 import argparse
 import json
-from typing import Optional, Tuple
-from ctypes import c_ubyte, c_uint, c_uint16, byref, memset, sizeof
-import ntag424_programmer as ntp
+import os
+import re
+import secrets
+import shutil
+import subprocess
+import sys
+from ctypes import c_ubyte, c_uint, c_uint16, memset, sizeof
+from pathlib import Path
 
-##########################################################################
-# URL ROUTE PROTECTION WITH NFC NTAG424 DNA tags
-##########################################################################
+import batch_cmacs
+import hashed_cmacs
 
 
-def get_canister_name_from_dfx() -> Optional[str]:
-    """Read dfx.json and get the canister name."""
+CANISTER_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+PARAM_RE = re.compile(r"^[A-Za-z0-9_.~-]+=[A-Za-z0-9_.~-]+$")
+ROUTE_RE = re.compile(r"^[A-Za-z0-9._~/-]+$")
+DEFAULT_KEY_HEX = "0" * 32
+
+
+class EnrollmentError(RuntimeError):
+    pass
+
+
+def run(command: list[str], project_root: Path) -> str:
+    result = subprocess.run(command, cwd=project_root, text=True, capture_output=True)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise EnrollmentError(f"command failed ({' '.join(command[:5])}): {detail}")
+    return result.stdout.strip()
+
+
+def normalize_route(value: str) -> str:
+    route = value.strip().lstrip("/")
+    if not route or not ROUTE_RE.fullmatch(route):
+        raise EnrollmentError(
+            "route must use only letters, digits, '/', '.', '_', '~' or '-'"
+        )
+    if ".." in route.split("/") or "//" in route:
+        raise EnrollmentError("route cannot contain '..' or empty path segments")
+    return route
+
+
+def parse_parameter(value: str) -> tuple[str, str]:
+    if not PARAM_RE.fullmatch(value):
+        raise EnrollmentError("parameter must use the form key=value without spaces or '&'")
+    key, parameter_value = value.split("=", 1)
+    return key, parameter_value
+
+
+def read_dfx_canisters(project_root: Path) -> dict[str, object]:
     try:
-        with open("dfx.json", "r") as f:
-            dfx_config = json.load(f)
-            for canister_name in dfx_config.get("canisters", {}):
-                if canister_name != "internet_identity":
-                    return canister_name
-        return None
-    except Exception as e:
-        print(f"Error reading dfx.json: {str(e)}")
-        return None
+        config = json.loads((project_root / "dfx.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise EnrollmentError(f"cannot read dfx.json: {exc}") from exc
+    canisters = config.get("canisters")
+    if not isinstance(canisters, dict):
+        raise EnrollmentError("dfx.json has no canisters object")
+    return canisters
 
 
-##########################################################################
+def resolve_canister_id(project_root: Path, canister: str, network: str, identity: str) -> str:
+    return run(
+        ["dfx", "canister", "id", "--network", network, "--identity", identity, canister],
+        project_root,
+    ).strip()
 
 
-def run_command(command: str) -> Tuple[int, str, str]:
-    """Run a shell command and return its exit code, stdout, and stderr."""
-    process = subprocess.Popen(
-        command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+def query_item(
+    project_root: Path,
+    canister: str,
+    network: str,
+    identity: str,
+    item_id: int,
+) -> dict[str, object]:
+    output = run(
+        [
+            "dfx",
+            "canister",
+            "call",
+            "--network",
+            network,
+            "--identity",
+            identity,
+            canister,
+            "getCollectionItem",
+            f"({item_id} : nat)",
+            "--query",
+            "--output",
+            "json",
+        ],
+        project_root,
     )
-    stdout, stderr = process.communicate()
-    return process.returncode, stdout, stderr
-
-
-##########################################################################
-
-
-def setup_route_and_program(
-    canister_id: str,
-    page: str,
-    params: str = None,
-    use_random_key: bool = False,
-    ic_mode: bool = False,
-    cmac_count: int = 20000,
-) -> bool:
-    """Setup protected route and program NFC card."""
     try:
-        # Get canister name from dfx.json
-        canister_name = get_canister_name_from_dfx()
-        if not canister_name:
-            print("Error: Could not find canister name in dfx.json")
-            return False
-        print(f"Using canister name from dfx.json: {canister_name}")
+        value = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise EnrollmentError(f"unexpected getCollectionItem response: {output}") from exc
+    if not isinstance(value, list) or len(value) != 1 or not isinstance(value[0], dict):
+        raise EnrollmentError(f"item {item_id} does not exist in {canister}")
+    return value[0]
 
-        # Form the URI for the card based on environment
-        if ic_mode:
-            uri = f"https://{canister_id}.raw.icp0.io/{page}"
-        else:
-            uri = f"http://{canister_id}.raw.localhost:4943/{page}"
-        print(f"Using URI: {uri}")
 
-        # Start card programming following ntag424_programmer.py logic
+def route_exists(
+    project_root: Path,
+    canister: str,
+    network: str,
+    identity: str,
+    route: str,
+) -> bool:
+    output = run(
+        [
+            "dfx",
+            "canister",
+            "call",
+            "--network",
+            network,
+            "--identity",
+            identity,
+            canister,
+            "get_route_protection",
+            f"({json.dumps(route)})",
+            "--query",
+            "--output",
+            "json",
+        ],
+        project_root,
+    )
+    try:
+        value = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise EnrollmentError(f"unexpected get_route_protection response: {output}") from exc
+    return isinstance(value, list) and len(value) == 1
+
+
+def ensure_route(
+    project_root: Path,
+    canister: str,
+    network: str,
+    identity: str,
+    route: str,
+) -> None:
+    if not route_exists(project_root, canister, network, identity, route):
+        run(
+            [
+                "dfx",
+                "canister",
+                "call",
+                "--network",
+                network,
+                "--identity",
+                identity,
+                canister,
+                "add_protected_route",
+                f"({json.dumps(route)})",
+            ],
+            project_root,
+        )
+    if not route_exists(project_root, canister, network, identity, route):
+        raise EnrollmentError("protected route was not persisted by the Collection")
+
+
+def base_url(canister_id: str, network: str, route: str) -> str:
+    if network == "ic":
+        return f"https://{canister_id}.raw.icp0.io/{route}"
+    return f"http://{canister_id}.raw.localhost:4943/{route}"
+
+
+def save_random_key(key_hex: str, canister: str, uid: str, key_dir: Path | None) -> Path:
+    directory = key_dir or (Path.home() / ".local" / "share" / "evorev" / "nfc-keys")
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    try:
+        directory.chmod(0o700)
+    except OSError:
+        pass
+    path = directory / f"{canister}-{uid}.key"
+    if path.exists():
+        raise EnrollmentError(f"key file already exists; refusing to overwrite it: {path}")
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="ascii") as handle:
+        handle.write(key_hex + "\n")
+    return path
+
+
+def form_sdm_payload(uri: str, parameter: tuple[str, str] | None) -> dict[str, object]:
+    # Keep the CMAC as the final field, as required by the NTAG 424 SDM
+    # layout. Static routing data is placed before the dynamic mirrors.
+    payload = [0x00, 0x00, 0xD1, 0x01, 0x00, 0x55, 0x00]
+    payload.extend(uri.encode("ascii"))
+    payload.append(ord("?"))
+    if parameter is not None:
+        payload.extend(f"{parameter[0]}={parameter[1]}&".encode("ascii"))
+
+    payload.extend(b"uid=")
+    uid_offset = len(payload)
+    payload.extend([0] * 14)
+    payload.extend(b"&ctr=")
+    counter_offset = len(payload)
+    payload.extend([0] * 6)
+    payload.extend(b"&cmac=")
+    mac_offset = len(payload)
+    payload.extend([0] * 16)
+
+    header_length = 7
+    ndef_message_length = (len(payload) - header_length) + 5
+    ndef_record_length = (len(payload) - header_length) + 1
+    if ndef_message_length > 0xFF or ndef_record_length > 0xFF:
+        raise EnrollmentError("NDEF URL is too long for the short-record layout")
+    payload[1] = ndef_message_length
+    payload[4] = ndef_record_length
+    return {
+        "payload": payload,
+        "uid_offset": uid_offset,
+        "counter_offset": counter_offset,
+        "mac_offset": mac_offset,
+    }
+
+
+def program_tag(
+    ntp,
+    uri: str,
+    parameter: tuple[str, str] | None,
+    random_key_hex: str | None,
+    card_type: int,
+) -> None:
+    formed = form_sdm_payload(uri, parameter)
+
+    default_key = (c_ubyte * 16)()
+    memset(default_key, 0, sizeof(default_key))
+    file_no = c_ubyte(2)
+    key_no = c_ubyte(0)
+
+    status = ntp.nt4h_set_global_parameters(file_no, key_no, c_ubyte(0))
+    if status != 0:
+        raise EnrollmentError(
+            f"cannot select NTAG NDEF file: {ntp.uFR_NT4H_Status2String(status)}"
+        )
+
+    payload = formed["payload"]
+    write_buffer = (c_ubyte * len(payload))(*payload)
+    bytes_written = c_uint16()
+    auth_mode = c_ubyte(ntp.T4T_AUTHENTICATION["T4T_PK_PWD_AUTH"])
+    status = ntp.LinearWrite_PK(
+        write_buffer,
+        0,
+        c_uint16(len(payload)),
+        bytes_written,
+        auth_mode,
+        default_key,
+    )
+    if status != 0 or bytes_written.value != len(payload):
+        raise EnrollmentError(
+            f"NDEF write failed: {ntp.uFR_NT4H_Status2String(status)} "
+            f"({bytes_written.value}/{len(payload)} bytes)"
+        )
+
+    settings = (
+        default_key,
+        file_no,
+        key_no,
+        c_ubyte(3),
+        c_ubyte(0),
+        c_ubyte(0x0E),
+        c_ubyte(0),
+        c_ubyte(0),
+        c_ubyte(0),
+        c_ubyte(1),
+        c_ubyte(1),
+        c_ubyte(0),
+        c_ubyte(0),
+        c_ubyte(0x0E),
+        c_ubyte(0),
+        c_ubyte(0),
+        formed["uid_offset"],
+        formed["counter_offset"],
+        c_uint(0),
+        c_uint(formed["mac_offset"]),
+        c_uint(0),
+        c_uint(0),
+        formed["mac_offset"],
+        c_uint(0),
+    )
+    if card_type == 0x13:
+        status = ntp.nt4h_tt_change_sdm_file_settings_pk(
+            *settings,
+            c_ubyte(0),
+            c_uint(0),
+        )
+    else:
+        status = ntp.nt4h_change_sdm_file_settings_pk(*settings)
+    if status != 0:
+        raise EnrollmentError(
+            f"SDM configuration failed: {ntp.uFR_NT4H_Status2String(status)}"
+        )
+
+    if random_key_hex is not None:
+        new_key = ntp.string_to_hex_buffer(random_key_hex)
+        status = ntp.nt4h_change_key_pk(default_key, 0, new_key, default_key)
+        if status != 0:
+            raise EnrollmentError(
+                f"AES key change failed: {ntp.uFR_NT4H_Status2String(status)}"
+            )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Plan or execute one explicit NTAG 424 Collection enrollment"
+    )
+    parser.add_argument("--canister", required=True, help="Explicit alias, e.g. collection_bleu")
+    parser.add_argument("--item-id", required=True, type=int)
+    parser.add_argument("--route", help="NFC route; defaults to nfc/item/<item-id>")
+    parser.add_argument("--network", default="local")
+    parser.add_argument("--identity", default="raygen")
+    parser.add_argument("--expected-canister-id")
+    parser.add_argument("--param", help="One signed custom NDEF parameter, e.g. item_id=0")
+    parser.add_argument("--cmac-count", type=int, default=20_000)
+    parser.add_argument("--batch-size", type=int, default=1_000)
+    parser.add_argument("--random-key", action="store_true")
+    parser.add_argument("--key-dir", type=Path)
+    parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--yes", action="store_true", help="Skip the y/N confirmation")
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+    project_root = Path(__file__).resolve().parents[1]
+
+    try:
+        if shutil.which("dfx") is None:
+            raise EnrollmentError("dfx is not available")
+        if not CANISTER_RE.fullmatch(args.canister):
+            raise EnrollmentError("invalid canister alias")
+        if args.canister not in read_dfx_canisters(project_root):
+            raise EnrollmentError(f"{args.canister} is not declared in dfx.json")
+        if args.item_id < 0:
+            raise EnrollmentError("item-id cannot be negative")
+        if args.cmac_count <= 0 or args.cmac_count > 0xFFFFFF:
+            raise EnrollmentError("cmac-count must be between 1 and 16,777,215")
+        if args.batch_size <= 0:
+            raise EnrollmentError("batch-size must be greater than zero")
+
+        route = normalize_route(args.route or f"nfc/item/{args.item_id}")
+        parameter = parse_parameter(args.param) if args.param else None
+        canister_id = resolve_canister_id(
+            project_root, args.canister, args.network, args.identity
+        )
+        if args.expected_canister_id and canister_id != args.expected_canister_id:
+            raise EnrollmentError(
+                f"principal mismatch: expected {args.expected_canister_id}, resolved {canister_id}"
+            )
+        item = query_item(
+            project_root, args.canister, args.network, args.identity, args.item_id
+        )
+        route_is_present = route_exists(
+            project_root, args.canister, args.network, args.identity, route
+        )
+        uri = base_url(canister_id, args.network, route)
+        dynamic_url = (
+            uri
+            + "?"
+            + (f"{parameter[0]}={parameter[1]}&" if parameter else "")
+            + "uid=<UID>&ctr=<COUNTER>&cmac=<CMAC>"
+        )
+
+        print("\nNFC enrollment plan")
+        print("===================")
+        print(f"Collection alias : {args.canister}")
+        print(f"Principal        : {canister_id}")
+        print(f"Network          : {args.network}")
+        print(f"Identity         : {args.identity}")
+        print(f"Item             : {args.item_id} · {item.get('name', '')}")
+        print(f"Protected route  : /{route} ({'already present' if route_is_present else 'to create'})")
+        print(f"NDEF URL         : {dynamic_url}")
+        print(f"CMAC proofs      : {args.cmac_count}")
+        print(f"AES key          : {'random, saved before programming' if args.random_key else 'factory test key (all zeroes)'}")
+
+        if not args.execute:
+            print("\nPLAN ONLY — no reader, tag or canister state was changed.")
+            return 0
+
+        if not args.yes:
+            confirmation = input(
+                "\n"
+                f"Place the NTAG 424 for Item {args.item_id} on the programmer.\n"
+                f"Collection to program: {args.canister} ({canister_id})\n"
+                f"NFC path: /{route}\n"
+                "Continue? [y/N]: "
+            ).strip().lower()
+            if confirmation != "y":
+                raise EnrollmentError("programming cancelled; nothing was changed")
+
+        # The vendor library resolves its native .so relative to the project root.
+        os.chdir(project_root)
+        import ntag424_programmer as ntp
+
         status = ntp.ReaderOpen()
         if status != 0:
-            print(f"Error opening reader: {ntp.uFR_NT4H_Status2String(status)}")
-            return False
-
-        # Get card UID (following ntag424_programmer.py logic)
-        uid = (c_ubyte * 11)()
-        sak = c_ubyte()
-        uid_size = c_ubyte()
-        status = ntp.GetCardIdEx(sak, uid, uid_size)
-        if status != 0:
-            print(f"Error getting card ID: {ntp.uFR_NT4H_Status2String(status)}")
-            return False
-
-        card_uid = "".join(f"{uid[n]:02X}" for n in range(uid_size.value))
-        print(f"Successfully got card UID: {card_uid}")
-
-        # Form SDM NDEF Payload
-        formed_result = ntp.form_sdm_ndef_payload(uri)
-        print(f"Formed NDEF payload")
-
-        # Get extended payload
-        extended_payload_result = ntp.add_additional_ndef_payload_parameter(
-            formed_result["sdm_payload"],
-            params.split("=")[0] if params and "=" in params else "",
-            params.split("=")[1] if params and "=" in params else "",
-        )
-
-        # Setup for writing
-        default_key = (c_ubyte * 16)()
-        memset(default_key, 0, sizeof(default_key))
-
-        # Write SDM payload
-        file_no = c_ubyte(2)
-        key_no = c_ubyte(0)
-        communication_mode = c_ubyte(0)
-        status = ntp.nt4h_set_global_parameters(file_no, key_no, communication_mode)
-        if status != 0:
-            print(
-                f"Error setting global parameters: {ntp.uFR_NT4H_Status2String(status)}"
+            raise EnrollmentError(
+                f"cannot open D-Logic programmer: {ntp.uFR_NT4H_Status2String(status)}"
             )
-            return False
-
-        write_data_buffer = (
-            c_ubyte * len(extended_payload_result["extended_payload"])
-        )(*extended_payload_result["extended_payload"])
-        write_len = c_uint16(extended_payload_result["extended_payload_length"])
-        bytes_written = c_uint16()
-        auth_mode = c_ubyte(ntp.T4T_AUTHENTICATION["T4T_PK_PWD_AUTH"])
-
-        status = ntp.LinearWrite_PK(
-            write_data_buffer, 0, write_len, bytes_written, auth_mode, default_key
-        )
-        if status != 0:
-            print(f"Error writing NDEF message: {ntp.uFR_NT4H_Status2String(status)}")
-            return False
-        print("NDEF Message written successfully")
-
-        # Change SDM settings
-        communication_mode = c_ubyte(3)
-        new_communication_mode = c_ubyte(0)
-        read_key_no = c_ubyte(0x0E)
-        write_key_no = c_ubyte(0)
-        read_write_key_no = c_ubyte(0)
-        change_key_no = c_ubyte(0)
-        uid_enable = c_ubyte(1)
-        read_ctr_enable = c_ubyte(1)
-        read_ctr_limit_enable = c_ubyte(0)
-        enc_file_data_enable = c_ubyte(0)
-        meta_data_key_no = c_ubyte(0x0E)
-        file_data_read_key_no = c_ubyte(0)
-        read_ctr_key_no = c_ubyte(0)
-        picc_data_offset = c_uint(0)
-        mac_input_offset = c_uint(formed_result["mac_offset"])
-        enc_offset = c_uint(0)
-        enc_length = c_uint(0)
-        read_ctr_limit = c_uint(0)
-        tt_status_enable = c_ubyte(0)
-        tt_status_offset = c_uint(0)
-
-        status = ntp.nt4h_tt_change_sdm_file_settings_pk(
-            default_key,
-            file_no,
-            key_no,
-            communication_mode,
-            new_communication_mode,
-            read_key_no,
-            write_key_no,
-            read_write_key_no,
-            change_key_no,
-            uid_enable,
-            read_ctr_enable,
-            read_ctr_limit_enable,
-            enc_file_data_enable,
-            meta_data_key_no,
-            file_data_read_key_no,
-            read_ctr_key_no,
-            formed_result["uid_offset"],
-            formed_result["read_ctr_offset"],
-            picc_data_offset,
-            mac_input_offset,
-            enc_offset,
-            enc_length,
-            formed_result["mac_offset"],
-            read_ctr_limit,
-            tt_status_enable,
-            tt_status_offset,
-        )
-        if status != 0:
-            print(f"Error setting SDM settings: {ntp.uFR_NT4H_Status2String(status)}")
-            return False
-        print("SDM settings set successfully")
-
-        if use_random_key:
-            new_key_str = ntp.generate_random_aes_key_hex()
-            new_key = ntp.string_to_hex_buffer(new_key_str)
-            status = ntp.nt4h_change_key_pk(default_key, 0, new_key, default_key)
+        try:
+            uid_buffer = (c_ubyte * 11)()
+            sak = c_ubyte()
+            uid_size = c_ubyte()
+            status = ntp.GetCardIdEx(sak, uid_buffer, uid_size)
             if status != 0:
-                print(
-                    f"Error changing master key: {ntp.uFR_NT4H_Status2String(status)}"
+                raise EnrollmentError(
+                    f"no readable tag on programmer: {ntp.uFR_NT4H_Status2String(status)}"
                 )
-                return False
-            print(f"Master key changed successfully to: {new_key_str}")
-            cmd = f"python3 scripts/hashed_cmacs.py -k {new_key_str} -u {card_uid} -c {cmac_count} -o cmacs.json"
-        else:
-            # Generate CMACs with default key
-            cmd = f"python3 scripts/hashed_cmacs.py -k 00000000000000000000000000000000 -u {card_uid} -c {cmac_count} -o cmacs.json"
-        exit_code, stdout, stderr = run_command(cmd)
-        if exit_code != 0:
-            print(f"Error generating CMACs: {stderr}")
-            return False
-        print("Generated CMACs successfully")
+            if uid_size.value != 7:
+                raise EnrollmentError(
+                    f"expected a 7-byte NTAG 424 UID, reader returned {uid_size.value} bytes"
+                )
+            uid = "".join(f"{uid_buffer[index]:02X}" for index in range(uid_size.value))
+            print(f"Detected tag UID : {uid}")
 
-        # Add --ic flag to dfx calls when in IC mode
-        ic_flag = "--ic " if ic_mode else ""
+            card_type = c_ubyte()
+            status = ntp.GetDlogicCardType(card_type)
+            if status != 0:
+                raise EnrollmentError(
+                    f"cannot identify tag type: {ntp.uFR_NT4H_Status2String(status)}"
+                )
+            if card_type.value not in (0x12, 0x13):
+                card_name = ntp.card_types.DLOGIC_CARD_TYPE.get(
+                    card_type.value, f"unknown 0x{card_type.value:02X}"
+                )
+                raise EnrollmentError(
+                    f"refusing unsupported tag type {card_name}; expected NTAG 424 DNA or DNA TT"
+                )
+            print(
+                "Detected tag type: "
+                + ntp.card_types.DLOGIC_CARD_TYPE[card_type.value]
+            )
 
-        cmd = f"dfx canister call {ic_flag}{canister_name} add_protected_route '(\"{page}\")'"
-        exit_code, stdout, stderr = run_command(cmd)
-        if exit_code != 0:
-            print(f"Error adding protected route: {stderr}")
-            return False
-        print("Added protected route successfully")
+            key_hex = DEFAULT_KEY_HEX
+            key_path: Path | None = None
+            if args.random_key:
+                key_hex = secrets.token_hex(16).upper()
+                key_path = save_random_key(key_hex, args.canister, uid, args.key_dir)
+                print(f"AES key saved    : {key_path} (mode 0600; key not displayed)")
 
-        # Pass the ic_mode flag to batch_cmacs.py
-        ic_flag_param = "--ic" if ic_mode else ""
-        cmd = f"python3 scripts/batch_cmacs.py cmacs.json {canister_name} {page} {card_uid} {ic_flag_param}"
-        exit_code, stdout, stderr = run_command(cmd)
-        if exit_code != 0:
-            print(f"Error uploading CMACs: {stderr}")
-            return False
-        print("Uploaded CMACs successfully")
+            hashes = hashed_cmacs.generate_hashes(args.cmac_count, uid, key_hex)
 
-        # Invalidate cache
-        # cmd = f'dfx canister call {ic_flag}{canister_name} invalidate_cache'
-        # exit_code, stdout, stderr = run_command(cmd)
-        # if exit_code != 0:
-        #     print(f"Error invalidating cache: {stderr}")
-        #     return False
-        # print("Invalidated cache successfully")
+            # Prepare and verify all on-chain validation data before touching the tag.
+            ensure_route(
+                project_root, args.canister, args.network, args.identity, route
+            )
+            batch_cmacs.upload_hashes(
+                project_root,
+                args.network,
+                args.identity,
+                args.canister,
+                route,
+                uid,
+                hashes,
+                args.batch_size,
+            )
 
-        return True
+            program_tag(
+                ntp,
+                uri,
+                parameter,
+                key_hex if args.random_key else None,
+                card_type.value,
+            )
+            print("NTAG NDEF, SDM settings and AES key programmed.")
+        finally:
+            ntp.ReaderClose()
 
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
-        return False
-    finally:
-        ntp.ReaderClose()
+        verified = batch_cmacs.query_existing_hashes(
+            project_root, args.network, args.identity, args.canister, route, uid
+        )
+        if verified != hashes:
+            raise EnrollmentError("final on-chain CMAC verification failed")
 
-
-##########################################################################
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Program NFC card and set up protected route"
-    )
-    parser.add_argument("canister_id", help="The canister ID")
-    parser.add_argument("page", help="The page to protect (e.g., page1.html)")
-    parser.add_argument(
-        "--random-key",
-        action="store_true",
-        help="Generate and use a random key instead of default",
-    )
-    parser.add_argument(
-        "--params", help="Additional query parameters (e.g., param1=value1)"
-    )
-    parser.add_argument(
-        "--ic",
-        action="store_true",
-        help="Use IC production mode (connects to ICP network instead of local replica)",
-    )
-    parser.add_argument(
-        "--cmac-count",
-        type=int,
-        default=20000,
-        help="Number of CMACs to generate (default: 20000)",
-    )
-
-    args = parser.parse_args()
-
-    if setup_route_and_program(
-        args.canister_id,
-        args.page,
-        args.params,
-        args.random_key,
-        args.ic,
-        args.cmac_count,
-    ):
-        print("\nSetup completed successfully!")
-    else:
-        print("\nSetup failed!")
+        print("\nEnrollment complete and on-chain CMAC table verified.")
+        print(f"Public item page : {base_url(canister_id, args.network, f'item/{args.item_id}')}")
+        return 0
+    except (EnrollmentError, RuntimeError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

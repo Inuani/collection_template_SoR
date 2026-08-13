@@ -1,4 +1,12 @@
-# Luandi System Architecture
+# Luandi System Architecture — vision produit historique
+
+> Cette page décrit une vision produit plus large (Discord, marketplace,
+> guardianship). L'architecture technique actuellement implémentée pour les
+> Stitchs est documentée dans
+> [`NFC_WORKFLOW.md`](NFC_WORKFLOW.md).
+> Les Collections ne coordonnent plus de sessions de Stitching : le Hub
+> authentifie le reader et orchestre les écritures `MeetingRecord` dans chaque
+> Collection concernée.
 
 ## 1. High-Level Concept: "The Discord Centric Model"
 
@@ -35,15 +43,31 @@ graph TD
 ## 3. Detailed Component Specs
 
 ### A. The "Soul" (ICP Canister)
-*   **Role:** The immutable database and logic core.
+*   **Role:** A Knitwork Hub coordinates trusted scans; each Collection remains
+    authoritative for its own tags, items and local Stitch history.
 *   **State:**
-    *   `Items`: Map<UID, ItemData> (Owner, XP, History).
-    *   `Witnesses`: List of authorized "Station" IDs (Shops).
-    *   `Sessions`: Temporary holding area for multi-item scans (Stitching).
+    *   Hub: authenticated readers (including their free-text location),
+        authorized Collections, sessions and coordination records.
+    *   Collection: tag bindings/counters, items and indexed `MeetingRecord`s.
 *   **API:**
-    *   `verify_scan(uid, cmac)`: Returns true/false.
-    *   `register_witness_event(shop_id, item_uid)`: Records a physical presence.
-    *   `transfer_guardianship(item_uid, new_guardian_discord_id)`: Updates ownership.
+    *   Hub: scan/session submission, registry and retry orchestration.
+    *   Collection: `prepare_meeting`, `finalize_meeting`, `confirm_meeting`,
+        `get_item_meetings`.
+    *   A physical NTAG scan uses the existing `ScanProof`: `proof` contains
+        the raw SDM CMAC. The Collection derives `nfc/item/<item_id>` and, in
+        the same `prepare_meeting` or `finalize_meeting` call, verifies the
+        registered UID, CMAC and monotonic counter. There is deliberately no
+        extra inter-canister validation call.
+    *   The reader location is copied into every meeting; there is no separate
+        `shop_id` in the Stitch V1 contract.
+*   **Failure semantics:** a Collection validates its complete local batch
+    before advancing any local tag counter. A prepared Collection must durably
+    reserve its valid counters before the finalizer is called; this is the
+    unavoidable boundary of the 1/3/5-call protocol. If a later Collection is
+    temporarily unavailable, no partial Stitch is confirmed: the Hub keeps the
+    meeting in `pending_sync` and retries the exact same idempotent request.
+    Avoiding even that pending counter reservation would require an additional
+    commit/abort phase and therefore more inter-canister calls.
 
 ### B. The "Voice" (Discord Bot)
 *   **Role:** The Town Crier & Notification System.

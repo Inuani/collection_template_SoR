@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Usage: ./download_file.sh <title> [output_filename] [canister_name] [network]
-# Example: ./download_file.sh "Logo" logo_downloaded.png collection local
+# Example: ./download_file.sh "Logo" logo_downloaded.png collection_monayolla local
 
 title=$1
 output=${2:-"downloaded_file"}
-canister=${3:-collection}
+canister=${3:-collection_monayolla}
 network=${4:-local}
 
 if [ -z "$title" ]; then

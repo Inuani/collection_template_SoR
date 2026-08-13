@@ -7,7 +7,25 @@ include .env
 REPLICA_URL := $(if $(filter ic,$(subst ',,$(DFX_NETWORK))),https://ic0.app,http://127.0.0.1:4943)
 CANISTER_NAME := $(shell grep "CANISTER_ID_" .env | grep -v "INTERNET_IDENTITY\|CANISTER_ID='" | head -1 | sed 's/CANISTER_ID_\([^=]*\)=.*/\1/' | tr '[:upper:]' '[:lower:]')
 CANISTER_ID := $(CANISTER_ID_$(shell echo $(CANISTER_NAME) | tr '[:lower:]' '[:upper:]'))
+IC_CANISTER_ID := $(shell dfx canister id $(CANISTER_NAME) --ic)
 CMAC_COUNT ?= 20000
+
+# NFC enrollment always targets one explicit Collection. These variables are
+# deliberately independent from CANISTER_NAME, which may still be used by the
+# older local-development targets below.
+NFC_COLLECTION ?= collection_bleu
+NFC_ITEM_ID ?= 0
+NFC_ROUTE ?= nfc/item/$(NFC_ITEM_ID)
+NFC_NETWORK ?= ic
+NFC_IDENTITY ?= raygen
+NFC_CMAC_COUNT ?= $(CMAC_COUNT)
+NFC_BATCH_SIZE ?= 1000
+NFC_RANDOM_KEY ?= 0
+NFC_PARAM ?= item_id=$(NFC_ITEM_ID)
+NFC_EXPECTED_CANISTER_ID ?= $(if $(filter collection_bleu,$(NFC_COLLECTION)),ubnuj-uyaaa-aaaak-qudbq-cai,$(if $(filter collection_monayolla,$(NFC_COLLECTION)),4623w-oqaaa-aaaak-qtrjq-cai,))
+NFC_KEY_ARGS = $(if $(filter 1 yes true,$(NFC_RANDOM_KEY)),--random-key,)
+NFC_EXPECTED_ARGS = $(if $(strip $(NFC_EXPECTED_CANISTER_ID)),--expected-canister-id $(NFC_EXPECTED_CANISTER_ID),)
+NFC_ARGS = --canister $(NFC_COLLECTION) --item-id $(NFC_ITEM_ID) --route $(NFC_ROUTE) --network $(NFC_NETWORK) --identity $(NFC_IDENTITY) --cmac-count $(NFC_CMAC_COUNT) --batch-size $(NFC_BATCH_SIZE) --param $(NFC_PARAM) $(NFC_KEY_ARGS) $(NFC_EXPECTED_ARGS)
 
 UNAME := $(shell uname)
 ifeq ($(UNAME), Darwin)
@@ -27,8 +45,10 @@ ic:
 url:
 	$(OPEN_CMD) http://$(CANISTER_ID).raw.localhost:4943/
 
-irl:
-	$(OPEN_CMD) https://$(CANISTER_ID).raw.icp0.io
+open:
+	$(OPEN_CMD) https://$(IC_CANISTER_ID).raw.icp0.io/
+
+irl: open
 
 sync:
 	icx-asset --replica http://127.0.0.1:4943 --pem ~/.config/dfx/identity/raygen/identity.pem sync $(CANISTER_ID) ./public
@@ -36,11 +56,29 @@ sync:
 Isync:
 	icx-asset --replica https://ic0.app --pem ~/.config/dfx/identity/raygen/identity.pem sync $(CANISTER_ID) ./public
 
-protect:
-	python3 scripts/setup_route.py $(CANISTER_ID) item/1 --cmac-count 200
+.PHONY: item-add nfc-plan nfc-program protect protect_ic
 
-protect_ic:
-	python3 scripts/setup_route.py $(CANISTER_ID) files/caramelo --cmac-count $(CMAC_COUNT) --ic
+# Interactively creates an Item in the explicitly selected Collection.
+# The canister assigns the Item ID; the script prints the matching NFC command.
+item-add:
+	./scripts/add_item.sh $(NFC_COLLECTION) $(NFC_NETWORK) $(NFC_IDENTITY)
+
+# Safe preflight only: no reader, tag or canister state is modified.
+nfc-plan:
+	python3 scripts/setup_route.py $(NFC_ARGS)
+
+# Explicit hardware/on-chain execution. The script displays the resolved
+# Collection, Item, Principal and path, then requires a `y` confirmation.
+nfc-program:
+	python3 scripts/setup_route.py $(NFC_ARGS) --execute
+
+# Backward-compatible names. Both are intentionally plan-only now.
+protect: NFC_NETWORK = local
+protect: NFC_CMAC_COUNT = 200
+protect: nfc-plan
+
+protect_ic: NFC_NETWORK = ic
+protect_ic: nfc-plan
 
 reinstall:
 	dfx deploy $(CANISTER_NAME) --mode reinstall
@@ -71,8 +109,8 @@ init_collection:
 	chmod +x scripts/init_collection.sh
 	./scripts/init_collection.sh $(CANISTER_NAME) local
 
-add_item:
-	dfx canister call collection --ic addCollectionItem '("Bleu #6", "/thumb_6.webp", "/item_6.webp", "fermeture dorée", "Rare", vec {record{"Aura"; "+100"}})'
+# Backward-compatible alias for the interactive, explicit Collection workflow.
+add_item: item-add
 
 list_items:
 	dfx canister call $(CANISTER_NAME) getAllCollectionItems

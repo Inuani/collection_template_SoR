@@ -17,6 +17,16 @@ module {
         tags : [(Text, TagData)]; // Map of UID -> TagData
     };
 
+    // Transient validation/commit value used by the Stitch protocol. It is
+    // deliberately not part of State, so adding it does not change the stable
+    // layout of already deployed Collections.
+    public type PhysicalScanAttempt = {
+        path : Text;
+        uid : Text;
+        counter : Nat;
+        cmac : Text;
+    };
+
     public type State = {
         var protected_routes : [(Text, ProtectedRoute)];
     };
@@ -26,6 +36,18 @@ module {
     };
 
     public class RoutesStorage(state : State) {
+        func normalizedRoutePath(path : Text) : Text {
+            if (Text.startsWith(path, #text "/")) path else "/" # path;
+        };
+
+        func requestPath(url : Text) : Text {
+            let parts = Iter.toArray(Text.split(url, #char '?'));
+            if (parts.size() == 0) "" else parts[0];
+        };
+
+        public func routeMatches(path : Text, url : Text) : Bool {
+            normalizedRoutePath(path) == requestPath(url);
+        };
         
         // Helper to find tag data in the list
         private func findTag(tags : [(Text, TagData)], uid : Text) : ?TagData {
@@ -165,6 +187,54 @@ module {
             };
         };
 
+        // Pure preflight used while validating an entire local Stitch batch.
+        // It never advances the NTAG counter: callers can therefore validate
+        // every scan first and commit them together only when all are valid.
+        public func validatePhysicalScan(scan : PhysicalScanAttempt) : Bool {
+            if (not Scan.isFixedHex(scan.uid, 14)) return false;
+            switch (Map.get(routes, Text.compare, scan.path)) {
+                case null { false };
+                case (?route) {
+                    switch (findTag(route.tags, scan.uid)) {
+                        case null { false };
+                        case (?tagData) {
+                            Scan.validateCmac(
+                                tagData.cmacs_,
+                                scan.cmac,
+                                scan.counter,
+                                tagData.scan_count_,
+                            );
+                        };
+                    };
+                };
+            };
+        };
+
+        // The method revalidates the complete batch before its first write.
+        // Actor message execution has no await here, so no other request can
+        // interleave between this preflight and the counter updates.
+        public func commitPhysicalScans(scans : [PhysicalScanAttempt]) : Bool {
+            var seenTags : [Text] = [];
+            for (scan in scans.vals()) {
+                let tagKey = scan.path # "|" # scan.uid;
+                switch (Array.find<Text>(seenTags, func(existing) { existing == tagKey })) {
+                    case (?_) { return false };
+                    case null {};
+                };
+                if (not validatePhysicalScan(scan)) return false;
+                seenTags := Array.concat(seenTags, [tagKey]);
+            };
+
+            for (scan in scans.vals()) {
+                if (not updateScanCount(scan.path, scan.uid, scan.counter)) {
+                    // This is unreachable after the validation pass unless the
+                    // in-memory route store is internally inconsistent.
+                    return false;
+                };
+            };
+            true;
+        };
+
         public func updateScanCount(path : Text, uid : Text, new_count : Nat) : Bool {
              switch (Map.get(routes, Text.compare, path)) {
                 case (?existing) {
@@ -245,7 +315,7 @@ module {
             Option.isSome(Array.find<(Text, ProtectedRoute)>(
                 Iter.toArray(Map.entries(routes)),
                 func((path, _)) : Bool {
-                    Text.contains(url, #text path);
+                    routeMatches(path, url);
                 },
             ));
         };

@@ -1,384 +1,97 @@
-import Text "mo:core/Text";
-import Nat "mo:core/Nat";
-import Int "mo:core/Int";
-import Time "mo:core/Time";
 import Iter "mo:core/Iter";
-import Array "mo:core/Array";
+import Text "mo:core/Text";
 import App "mo:liminal/App";
 import HttpContext "mo:liminal/HttpContext";
-import SessionMiddleware "mo:liminal/Middleware/Session";
-import ProtectedRoutes "../nfc_protec_routes";
-import Scan "../utils/scan";
-import InvalidScan "../utils/invalid_scan";
 import Files "../files";
+import ProtectedRoutes "../nfc_protec_routes";
+import InvalidScan "../utils/invalid_scan";
 
 module NFCMiddleware {
-
-    // ========================================
-    // NFC Utility Functions
-    // ========================================
-
-    // Extract NFC parameters from URL
-    public func extractNFCParams(url : Text) : {
-        uid : Text;
-        cmac : Text;
-        ctr : Text;
-    } {
-        let queries = Iter.toArray(Text.split(url, #char '?'));
-
-        var uid = "";
-        var cmac = "";
-        var ctr = "";
-
-        if (queries.size() >= 2) {
-            let params = Iter.toArray(Text.split(queries[1], #char '&'));
-
-            for (param in params.vals()) {
-                let keyValue = Iter.toArray(Text.split(param, #char '='));
-                if (keyValue.size() == 2) {
-                    switch (keyValue[0]) {
-                        case "uid" { uid := keyValue[1] };
-                        case "cmac" { cmac := keyValue[1] };
-                        case "ctr" { ctr := keyValue[1] };
-                        case _ {};
-                    };
-                };
-            };
+    func invalidScanResponse() : App.HttpResponse {
+        {
+            statusCode = 403;
+            headers = [("Content-Type", "text/html")];
+            body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage());
+            streamingStrategy = null;
         };
-
-        { uid = uid; cmac = cmac; ctr = ctr };
     };
 
-    // Extract item ID from URL path - only works with pattern /stitch/#
-    public func extractItemIdFromUrl(url : Text) : ?Nat {
-        // Split URL by '/' and look for "stitch" followed by a numeric ID
-        let parts = Iter.toArray(Text.split(url, #char '/'));
-
-        var i = 0;
-        let partsSize = parts.size();
-        while (i < partsSize) {
-            let part = parts[i];
-
-            // Check if this part is "stitch"
-            if (part == "stitch") {
-                // Check if next part exists and could be an ID
-                if (i + 1 < partsSize) {
-                    let potentialId = parts[i + 1];
-                    // Remove query string if present
-                    let idClean = Iter.toArray(Text.split(potentialId, #char '?'))[0];
-
-                    // Try to parse as number
-                    switch (Nat.fromText(idClean)) {
-                        case (?id) {
-                            // Found a valid numeric ID after "stitch"
-                            return ?id;
-                        };
-                        case null {
-                            // Not a number after "stitch"
-                            return null;
-                        };
-                    };
-                };
-            };
-            i += 1;
+    func invalidTokenResponse() : App.HttpResponse {
+        {
+            statusCode = 403;
+            headers = [("Content-Type", "text/plain")];
+            body = ?Text.encodeUtf8("Invalid or expired token");
+            streamingStrategy = null;
         };
+    };
 
+    func queryParameter(url : Text, key : Text) : ?Text {
+        let parts = Iter.toArray(Text.split(url, #char '?'));
+        if (parts.size() < 2) return null;
+        for (parameter in Text.split(parts[1], #char '&')) {
+            let keyValue = Iter.toArray(Text.split(parameter, #char '='));
+            if (keyValue.size() == 2 and keyValue[0] == key) {
+                return ?keyValue[1];
+            };
+        };
         null;
     };
 
-    // Generate HTML response for NFC scan result
-    public func generateScanRedirectPage(
-        redirectUrl : Text,
-        message : Text,
-        isError : Bool,
-    ) : Text {
-        let accentColor = if (isError) { "#ef4444" } else { "#10b981" };
-        let icon = if (isError) { "⚠️" } else { "✅" };
-
-        "<!DOCTYPE html>
-<html lang=\"fr\">
-<head>
-    <meta charset=\"UTF-8\">
-    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-    <title>Scan NFC</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #ffffff;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #1f2937;
-            text-align: center;
-            padding: 2rem;
-        }
-        .container {
-            max-width: 400px;
-            width: 100%;
-        }
-        .message {
-            font-size: 5rem;
-            margin-bottom: 2rem;
-            animation: fadeIn 0.5s ease-in;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: scale(0.8); }
-            to { opacity: 1; transform: scale(1); }
-        }
-        h1 {
-            font-size: 1.5rem;
-            margin-bottom: 3rem;
-            font-weight: 600;
-            color: #374151;
-        }
-        .spinner {
-            width: 60px;
-            height: 60px;
-            margin: 0 auto 2rem;
-            border: 5px solid #f3f4f6;
-            border-top-color: " # accentColor # ";
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        .status {
-            font-size: 0.875rem;
-            color: #9ca3af;
-            font-weight: 500;
-        }
-    </style>
-    <script>
-        setTimeout(function() {
-            window.location.href = '" # redirectUrl # "';
-        }, 1500);
-    </script>
-</head>
-<body>
-    <div class=\"container\">
-        <div class=\"message\">" # icon # "</div>
-        <h1>" # message # "</h1>
-        <div class=\"spinner\"></div>
-        <p class=\"status\">•••</p>
-    </div>
-</body>
-</html>";
-    };
-
-    // ========================================
-    // NFC Protection Middleware
-    // ========================================
-
+    // Stateless CMAC protection for configured pages and files. Meeting and
+    // session creation live exclusively in the authenticated Knitwork Hub.
     public func createNFCProtectionMiddleware(
-        protected_routes_storage : ProtectedRoutes.RoutesStorage,
-        file_storage : Files.FileStorage,
+        protectedRoutes : ProtectedRoutes.RoutesStorage,
+        fileStorage : Files.FileStorage,
     ) : App.Middleware {
         {
-            name = "NFC Protection with Session-Based Stitchings";
+            name = "NFC route protection";
             handleQuery = func(context : HttpContext.HttpContext, next : App.Next) : App.QueryResult {
-                if (protected_routes_storage.isProtectedRoute(context.request.url)) {
-                    return #upgrade; // Force verification in update call
+                if (protectedRoutes.isProtectedRoute(context.request.url)) {
+                    return #upgrade;
                 };
                 next();
             };
             handleUpdate = func(context : HttpContext.HttpContext, next : App.NextAsync) : async* App.HttpResponse {
                 let url = context.request.url;
-                if (protected_routes_storage.isProtectedRoute(url)) {
-                    let routes_array = protected_routes_storage.listProtectedRoutes();
-                    for ((path, protection) in routes_array.vals()) {
-                        if (Text.contains(url, #text path)) {
-                            // Extract item ID from URL if this is an item route
-                            let itemIdOpt = extractItemIdFromUrl(url);
+                if (not protectedRoutes.isProtectedRoute(url)) {
+                    return await* next();
+                };
 
-                            switch (itemIdOpt) {
-                                case (?itemId) {
-                                    // This is an item route - verify NFC
-                                    // Use verifyRouteAccess to handle multi-tag (UID) logic
-                                    if (not protected_routes_storage.verifyRouteAccess(path, url)) {
-                                        // Invalid NFC scan
-                                        return {
-                                            statusCode = 403;
-                                            headers = [("Content-Type", "text/html")];
-                                            body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage());
-                                            streamingStrategy = null;
-                                        };
+                for ((path, _) in protectedRoutes.listProtectedRoutes().vals()) {
+                    if (protectedRoutes.routeMatches(path, url)) {
+                        let pathOnly = Iter.toArray(Text.split(url, #char '?'))[0];
+                        if (Text.startsWith(pathOnly, #text "/files/")) {
+                            let segments = Iter.toArray(Text.split(pathOnly, #char '/'));
+                            let filename = if (segments.size() == 0) { "" } else { segments[segments.size() - 1] };
+                            switch (queryParameter(url, "token")) {
+                                case (?token) {
+                                    if (not fileStorage.validateToken(token, filename)) {
+                                        return invalidTokenResponse();
                                     };
-
-                                    // VerifyRouteAccess already updated the scan count if successful
-
-                                    // Get session from context (unwrap optional)
-                                    switch (context.session) {
-                                        case null {
-                                            // No session available - shouldn't happen with session middleware
-                                            return {
-                                                statusCode = 500;
-                                                headers = [("Content-Type", "text/html")];
-                                                body = ?Text.encodeUtf8("<html><body><h1>Session Error</h1><p>Session not available.</p></body></html>");
-                                                streamingStrategy = null;
-                                            };
-                                        };
-                                        case (?session) {
-                                            // Check if session has active stitching
-                                            let itemsInSession = switch (session.get("stitching_items")) {
-                                                case null { [] }; // No stitching yet
-                                                case (?itemsText) {
-                                                    // Parse existing items
-                                                    let parts = Iter.toArray(Text.split(itemsText, #char ','));
-                                                    var items : [Nat] = [];
-                                                    for (part in parts.vals()) {
-                                                        switch (Nat.fromText(part)) {
-                                                            case (?n) {
-                                                                items := Array.concat(items, [n]);
-                                                            };
-                                                            case null {};
-                                                        };
-                                                    };
-                                                    items;
-                                                };
-                                            };
-
-                                            // Check if item already in session
-                                            let alreadyScanned = Array.find<Nat>(itemsInSession, func(id) = id == itemId);
-
-                                            switch (alreadyScanned) {
-                                                case (?_) {
-                                                    // Already scanned - show error
-                                                    let html = "<html><body><h1>Already Scanned</h1><p>This item is already in the stitching.</p></body></html>";
-                                                    return {
-                                                        statusCode = 200;
-                                                        headers = [("Content-Type", "text/html")];
-                                                        body = ?Text.encodeUtf8(html);
-                                                        streamingStrategy = null;
-                                                    };
-                                                };
-                                                case null {
-                                                    // Add to session
-                                                    let updatedItems = Array.concat(itemsInSession, [itemId]);
-                                                    var itemsText = "";
-                                                    var first = true;
-                                                    for (id in updatedItems.vals()) {
-                                                        if (not first) {
-                                                            itemsText #= ",";
-                                                        };
-                                                        itemsText #= Nat.toText(id);
-                                                        first := false;
-                                                    };
-                                                    session.set("stitching_items", itemsText);
-
-                                                    // Store/update stitching timestamp - reset timer on each new scan
-                                                    session.set("stitching_start_time", Int.toText(Time.now()));
-
-                                                    // Generate cryptographically secure finalization token
-                                                    let finalizeToken = await* SessionMiddleware.generateRandomId();
-                                                    session.set("stitching_finalize_token", finalizeToken);
-
-                                                    // Redirect to stitching page
-                                                    let redirectUrl = if (updatedItems.size() == 1) {
-                                                        "/stitching/waiting?item=" # Nat.toText(itemId);
-                                                    } else {
-                                                        "/stitching/active?items=" # itemsText;
-                                                    };
-
-                                                    let html = "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0;url=" # redirectUrl # "'></head><body> Scanned! Redirecting...</body></html>";
-
-                                                    return {
-                                                        statusCode = 200;
-                                                        headers = [("Content-Type", "text/html")];
-                                                        body = ?Text.encodeUtf8(html);
-                                                        streamingStrategy = null;
-                                                    };
-                                                };
-                                            };
-                                        };
-                                    };
+                                    return await* next();
                                 };
                                 case null {
-                                    // Not an item route - use Stateless Token Redirect
-
-                                    // 1. Extract filename (e.g. "caramelo" from "/files/caramelo")
-                                    let pathOnly = Iter.toArray(Text.split(url, #char '?'))[0];
-                                    let pathSegments = Iter.toArray(Text.split(pathOnly, #char '/'));
-                                    let filename = if (pathSegments.size() > 0) pathSegments[pathSegments.size() - 1] else "";
-
-                                    if (Text.startsWith(pathOnly, #text "/files/")) {
-                                        // 2. Audio File logic - Check for access token
-                                        var token : ?Text = null;
-                                        let queries = Iter.toArray(Text.split(url, #char '?'));
-                                        if (queries.size() >= 2) {
-                                            let params = Iter.toArray(Text.split(queries[1], #char '&'));
-                                            for (param in params.vals()) {
-                                                let keyValue = Iter.toArray(Text.split(param, #char '='));
-                                                if (keyValue.size() == 2 and keyValue[0] == "token") {
-                                                    token := ?keyValue[1];
-                                                };
-                                            };
-                                        };
-
-                                        switch (token) {
-                                            case (?t) {
-                                                // Validate Token
-                                                // If valid, we do nothing and let it fall through to next()
-                                                if (not file_storage.validateToken(t, filename)) {
-                                                    return {
-                                                        statusCode = 403;
-                                                        headers = [("Content-Type", "text/plain")];
-                                                        body = ?Text.encodeUtf8("Invalid or expired token");
-                                                        streamingStrategy = null;
-                                                    };
-                                                };
-                                            };
-                                            case null {
-                                                // No token. Must be NFC scan.
-                                                // Verify NFC (Consumes Counter)
-                                                if (not protected_routes_storage.verifyRouteAccess(path, url)) {
-                                                    return {
-                                                        statusCode = 403;
-                                                        headers = [("Content-Type", "text/html")];
-                                                        body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage());
-                                                        streamingStrategy = null;
-                                                    };
-                                                } else {
-                                                    // NFC Valid! Generate Token and Redirect.
-                                                    let newToken = file_storage.generateToken(filename);
-                                                    let html = file_storage.generateHTMLWrapper(filename, newToken);
-
-                                                    return {
-                                                        statusCode = 200;
-                                                        headers = [("Content-Type", "text/html")];
-                                                        body = ?Text.encodeUtf8(html);
-                                                        streamingStrategy = null;
-                                                    };
-                                                };
-                                            };
-                                        };
-                                    } else {
-                                        // Generic route (like /item/1)
-                                        if (not protected_routes_storage.verifyRouteAccess(path, url)) {
-                                            return {
-                                                statusCode = 403;
-                                                headers = [("Content-Type", "text/html")];
-                                                body = ?Text.encodeUtf8(InvalidScan.generateInvalidScanPage());
-                                                streamingStrategy = null;
-                                            };
-                                        } else {
-                                            // NFC Valid!
-                                            // The counter is consumed. Let the router handle the page normally!
-                                            return await* next();
-                                        };
+                                    if (not protectedRoutes.verifyRouteAccess(path, url)) {
+                                        return invalidScanResponse();
+                                    };
+                                    let token = fileStorage.generateToken(filename);
+                                    return {
+                                        statusCode = 200;
+                                        headers = [("Content-Type", "text/html")];
+                                        body = ?Text.encodeUtf8(fileStorage.generateHTMLWrapper(filename, token));
+                                        streamingStrategy = null;
                                     };
                                 };
                             };
                         };
+
+                        if (not protectedRoutes.verifyRouteAccess(path, url)) {
+                            return invalidScanResponse();
+                        };
+                        return await* next();
                     };
                 };
-                await* next();
+                invalidScanResponse();
             };
         };
     };

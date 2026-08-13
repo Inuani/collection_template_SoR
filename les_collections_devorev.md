@@ -28,7 +28,7 @@ The "Social Network" is not a single feed like Facebook. It is visible in two pl
     *   A bot broadcasts major events "Trust Events" (invisible blockchain actions made visible).
     *   **The Broadcasts:**
         *   *📍 "The Wanderer": Hoodie #88 just checked in at Galaxy Bar!* (Proof of Location)
-        *   *🧵 "The Bond": Cap #42 stitched with T-Shirt #10.* (Proof of Meeting)
+        *   *🧵 "The Bond": Cap #42 stitched with T-Shirt #10.* (Stitch)
         *   *🤝 "The Pass": Hoodie #88 was adopted by a new Guardian.* (Proof of Transfer)
         *   *💎 " The Drop": New Artifact Consigned at The Sanctuary!* (Proof of Listing)
     *   This makes the invisible life of objects visible to the human community.
@@ -40,12 +40,16 @@ The "Social Network" is not a single feed like Facebook. It is visible in two pl
 We use a hybrid approach to balance the permanent truth of the blockchain with the flexibility of modern social tools (Discord).
 
 ### A. The "Soul" (Web3 - ICP Canister)
-*   **Role:** The single source of truth for authenticity and history.
+*   **Role:** The Hub authenticates the reader and coordinates the operation;
+    every participating Collection is the source of truth for its own object's
+    copy of the confirmed meeting.
 *   **Data Stored:** 
     *   Authenticity (NFC CMACs/Keys).
-    *   Stitching History (Which items have met).
+    *   `MeetingRecord` history (which globally identified objects met, at which
+        reader location, and when).
     *   Current Guardian Link (Session-based or explicit).
-*   **Function:** Verifies scans and authorizes "Status Changes" (e.g., from "In Wardrobe" to "Seeking Guardian").
+*   **Function:** A Collection validates its own tag; the Hub then obtains a
+    confirmed write in every Collection involved in the meeting.
 
 ### B. The "Voice" (Web2 - Discord + Minimal Frontend)
 *   **The Interface:** No traditional login (email/password). Access is granted by **Scanning the Item**.
@@ -113,9 +117,12 @@ We support two primary modes of exchange, both anchored by **Physical Witness Po
 
 The platform incentivizes meeting up *even without selling*.
 
-*   **Meeting of Minds:** If two Guardians meet, they can scan their respective items together (Stitching).
-*   **Symbiosis:** Both items gain **XP (Experience Points)** and a history entry: *"Hoodie #88 met Cap #42."*
-*   **Venue Leveling:** The Partner Location (Shop/Bar) also gains reputation for hosting these meetings.
+*   **Meeting of Minds:** Two or three distinct objects can be scanned together,
+    with less than ten seconds strictly between the first and last scan.
+*   **Shared Proof:** The same `meeting_id`, full participant list and reader
+    location are written in every participating Collection.
+*   **Extensibility:** XP or venue reputation can later be derived from confirmed
+    meetings; they are not part of the current V1 consensus record.
 
 ---
 

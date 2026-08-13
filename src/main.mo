@@ -1,8 +1,8 @@
 import Liminal "mo:liminal";
+import Array "mo:core/Array";
 import Principal "mo:core/Principal";
 import Error "mo:core/Error";
 import AssetsMiddleware "mo:liminal/Middleware/Assets";
-import SessionMiddleware "mo:liminal/Middleware/Session";
 import CORSMiddleware "middleware/cors";
 import NFCMiddleware "middleware/nfc";
 import HttpAssets "mo:http-assets@0";
@@ -18,8 +18,9 @@ import Theme "utils/theme";
 import Buttons "utils/buttons";
 import FileService "services/file_service";
 import CollectionService "services/collection_service";
-import StitchingService "services/stitching_service";
 import AssetService "services/asset_service";
+import KnitworkProtocol "knitwork_protocol";
+import KnitworkStore "knitwork_store";
 
 shared ({ caller = initializer }) persistent actor class Actor() = self {
 
@@ -38,6 +39,45 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     let collectionState = Collection.init();
     transient let collection = Collection.Collection(collectionState);
 
+    let knitworkState = KnitworkStore.init();
+    transient let knitworkStore = KnitworkStore.Store(
+        knitworkState,
+        canisterId,
+        func(itemId : Nat) : Bool {
+            switch (collection.getItem(itemId)) {
+                case (?_) { true };
+                case null { false };
+            };
+        },
+        func(scan : KnitworkStore.PhysicalScanAttempt) : Bool {
+            protected_routes_storage.validatePhysicalScan({
+                path = scan.path;
+                uid = scan.uid;
+                counter = scan.counter;
+                cmac = scan.cmac;
+            });
+        },
+        func(scans : [KnitworkStore.PhysicalScanAttempt]) : Bool {
+            protected_routes_storage.commitPhysicalScans(
+                Array.map<KnitworkStore.PhysicalScanAttempt, ProtectedRoutes.PhysicalScanAttempt>(
+                    scans,
+                    func(scan) {
+                        {
+                            path = scan.path;
+                            uid = scan.uid;
+                            counter = scan.counter;
+                            cmac = scan.cmac;
+                        };
+                    },
+                )
+            );
+        },
+    );
+
+    type KnitworkPeer = actor {
+        confirm_meeting : (KnitworkProtocol.ConfirmMeetingRequest) -> async KnitworkProtocol.MeetingResult;
+    };
+
     // DORMANT STABLE VARIABLE: Preserved exclusively to satisfy Motoko M0169 compatibility checks
     let themeState = Theme.init();
 
@@ -46,7 +86,6 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     transient let fileService = FileService.make(file_storage);
     transient let collectionService = CollectionService.make(initializer, collection);
-    transient let stitchingService = StitchingService.make(collection);
 
     transient let setPermissions : HttpAssets.SetPermissions = {
         commit = [initializer];
@@ -59,22 +98,6 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     transient let assetMiddlewareConfig : AssetsMiddleware.Config = {
         store = assetStore;
-    };
-
-    // Configure session middleware for stitching system
-    transient let sessionStore = SessionMiddleware.buildInMemoryStore();
-    transient let sessionConfig : SessionMiddleware.Config = {
-        cookieName = "stitching_session";
-        idleTimeout = 3 * 60; // 3 minutes in seconds (longer than stitching duration)
-        cookieOptions = {
-            path = "/";
-            secure = false; // Set to true in production with HTTPS
-            httpOnly = true;
-            sameSite = ?#lax;
-            maxAge = ?(3 * 60); // 3 minutes
-        };
-        store = sessionStore;
-        idGenerator = SessionMiddleware.generateRandomId;
     };
 
     // Liminal compatible streaming callback
@@ -110,15 +133,16 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     transient let app = Liminal.App({
         middleware = [
             CORSMiddleware.createCORSMiddleware(),
-            SessionMiddleware.new(sessionConfig),
             NFCMiddleware.createNFCProtectionMiddleware(protected_routes_storage, file_storage),
             RouterMiddleware.new(
                 Routes.routerConfig(
-                    Principal.toText(canisterId),
+                    canisterId,
                     streamingCallback,
                     collection,
+                    func(itemId : Nat) : [KnitworkProtocol.MeetingRecord] {
+                        knitworkStore.getItemMeetings(itemId);
+                    },
                     file_storage,
-                    buttonsManager,
                 )
             ),
             AssetsMiddleware.new(assetMiddlewareConfig),
@@ -225,12 +249,18 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
         collectionService.deleteItem(caller, id);
     };
 
-    public query func getCollectionItem(id : Nat) : async ?Collection.Item {
-        collectionService.getItem(id);
+    public query func getCollectionItem(id : Nat) : async ?Collection.PublicItem {
+        switch (collectionService.getItem(id)) {
+            case (?item) ?Collection.toPublicItem(item);
+            case null null;
+        };
     };
 
-    public query func getAllCollectionItems() : async [Collection.Item] {
-        collectionService.getAllItems();
+    public query func getAllCollectionItems() : async [Collection.PublicItem] {
+        Array.map<Collection.Item, Collection.PublicItem>(
+            collectionService.getAllItems(),
+            Collection.toPublicItem,
+        );
     };
 
     public query func getCollectionItemCount() : async Nat {
@@ -254,27 +284,119 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     };
 
     // ============================================
-    // PROOF-OF-STITCHING API FUNCTIONS
+    // KNITWORK COLLECTION PROTOCOL V1
     // ============================================
 
-    // Add tokens to an item
-    public shared func addTokens(itemId : Nat, amount : Nat) : async Result.Result<(), Text> {
-        stitchingService.addTokens(itemId, amount);
+    public query func protocol_info() : async KnitworkProtocol.ProtocolInfo {
+        knitworkStore.protocolInfo();
     };
 
-    // Record a stitching for multiple items
-    public shared func recordStitching(itemIds : [Nat], stitchingId : Text, tokensEarned : Nat) : async Result.Result<(), Text> {
-        stitchingService.recordStitching(itemIds, stitchingId, tokensEarned);
+    public query func get_trusted_hub() : async ?Principal {
+        knitworkStore.getTrustedHub();
     };
 
-    // Get item's token balance
-    public query func getItemBalance(itemId : Nat) : async Result.Result<Nat, Text> {
-        stitchingService.getItemBalance(itemId);
+    public shared ({ caller }) func set_trusted_hub(
+        hub : ?Principal
+    ) : async KnitworkProtocol.UnitResult {
+        if (caller != initializer) {
+            return #err("caller is not the Collection initializer");
+        };
+        switch (hub) {
+            case (?principal) {
+                if (Principal.isAnonymous(principal)) {
+                    return #err("trusted Hub cannot be anonymous");
+                };
+            };
+            case null {};
+        };
+        knitworkStore.setTrustedHub(hub);
+        #ok();
     };
 
-    // Get item's stitching history
-    public query func getItemStitchingHistory(itemId : Nat) : async Result.Result<[Collection.StitchingRecord], Text> {
-        stitchingService.getItemStitchingHistory(itemId);
+    public shared ({ caller }) func prepare_meeting(
+        request : KnitworkProtocol.PrepareMeetingRequest
+    ) : async KnitworkProtocol.PrepareResult {
+        knitworkStore.prepareMeeting(caller, request);
+    };
+
+    public shared ({ caller }) func finalize_meeting(
+        request : KnitworkProtocol.FinalizeMeetingRequest
+    ) : async KnitworkProtocol.MeetingResult {
+        let localRecord = switch (knitworkStore.beginFinalize(caller, request)) {
+            case (#err(message)) { return #err(message) };
+            case (#ok(record)) { record };
+        };
+
+        switch (localRecord.status) {
+            case (#confirmed) { return #ok(localRecord) };
+            case (#pending) {};
+        };
+
+        // The pending local record is durable before the first await. Retrying
+        // this method safely replays confirmations with the same meeting_id.
+        for (peer in request.prepared_peers.vals()) {
+            let peerActor : KnitworkPeer = actor (Principal.toText(peer.collection));
+            let confirmation : KnitworkProtocol.MeetingResult = try {
+                await peerActor.confirm_meeting({
+                    event = request.event;
+                    handoff_token = peer.handoff_token;
+                });
+            } catch (error) {
+                return #err(
+                    "peer confirmation rejected by " #
+                    Principal.toText(peer.collection) #
+                    ": " # Error.message(error)
+                );
+            };
+
+            switch (confirmation) {
+                case (#err(message)) {
+                    return #err(
+                        "peer confirmation failed for " #
+                        Principal.toText(peer.collection) #
+                        ": " # message
+                    );
+                };
+                case (#ok(record)) {
+                    switch (
+                        knitworkStore.validatePeerConfirmation(
+                            peer.collection,
+                            request.event,
+                            record,
+                        )
+                    ) {
+                        case (#ok()) {};
+                        case (#err(message)) {
+                            return #err(
+                                "invalid peer confirmation from " #
+                                Principal.toText(peer.collection) #
+                                ": " # message
+                            );
+                        };
+                    };
+                };
+            };
+        };
+
+        knitworkStore.completeFinalization(request.event);
+    };
+
+    public shared ({ caller }) func confirm_meeting(
+        request : KnitworkProtocol.ConfirmMeetingRequest
+    ) : async KnitworkProtocol.MeetingResult {
+        knitworkStore.confirmMeeting(caller, request);
+    };
+
+    public query func get_meeting(
+        meeting_id : Text
+    ) : async ?KnitworkProtocol.MeetingRecord {
+        knitworkStore.getMeeting(meeting_id);
+    };
+
+    public query func get_item_meetings(
+        item_id : Nat
+    ) : async [KnitworkProtocol.MeetingRecord] {
+        knitworkStore.getItemMeetings(item_id);
     };
 
     assetStore.set_streaming_callback(http_request_streaming_callback);

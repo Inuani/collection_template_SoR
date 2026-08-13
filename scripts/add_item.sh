@@ -1,42 +1,64 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -u
 
 # Script to add items to the collection
-# Usage: ./add_item.sh
+# Usage: ./add_item.sh <canister_alias> <network> [identity]
 
-CANISTER_NAME=${1:-collection}
-NETWORK=${2:-local}
+CANISTER_NAME=${1:-}
+NETWORK=${2:-ic}
+IDENTITY=${3:-raygen}
 
 # Check if canister name is provided
 if [ -z "$CANISTER_NAME" ]; then
     echo "Error: Canister name is required"
-    echo "Usage: $0 [canister_name] [network]"
+    echo "Usage: $0 <canister_alias> <network> [identity]"
+    exit 1
+fi
+
+case "$NETWORK" in
+    ic|local) ;;
+    *)
+        echo "Error: network must be 'ic' or 'local'"
+        exit 1
+        ;;
+esac
+
+if ! CANISTER_ID=$(dfx canister id --network "$NETWORK" --identity "$IDENTITY" "$CANISTER_NAME" 2>/dev/null); then
+    echo "Error: cannot resolve '$CANISTER_NAME' on network '$NETWORK'"
     exit 1
 fi
 
 echo "Adding item to collection..."
 echo "Canister: $CANISTER_NAME"
+echo "Principal: $CANISTER_ID"
 echo "Network: $NETWORK"
+echo "Identity: $IDENTITY"
 echo ""
 
 # Prompt for item details
-read -p "Item name: " NAME
-read -p "Thumbnail URL (e.g., /item0_thumb.webp): " THUMBNAIL
-read -p "Image URL (e.g., /item0.webp): " IMAGE
-read -p "Description: " DESCRIPTION
-read -p "Rarity (e.g., Rare, Légendaire, Epic): " RARITY
+read -r -p "Item name: " NAME
+read -r -p "Thumbnail URL (e.g., /item0_thumb.webp): " THUMBNAIL
+read -r -p "Image URL (e.g., /item0.webp): " IMAGE
+read -r -p "Description (optional, Enter to skip): " DESCRIPTION
+read -r -p "Rarity [Unique]: " RARITY
+RARITY=${RARITY:-Unique}
 
 echo ""
-echo "Adding attributes (enter empty key to finish):"
 ATTRIBUTES="vec {"
-
-while true; do
-    read -p "Attribute key (or press Enter to finish): " KEY
-    if [ -z "$KEY" ]; then
-        break
-    fi
-    read -p "Attribute value: " VALUE
-    ATTRIBUTES="${ATTRIBUTES}record{\"${KEY}\"; \"${VALUE}\"};"
-done
+read -r -p "Add attributes? [y/N]: " ADD_ATTRIBUTES
+case "$ADD_ATTRIBUTES" in
+    y|Y|yes|YES|Yes|o|O|oui|OUI|Oui)
+        while true; do
+            read -r -p "Attribute key (Enter to finish): " KEY
+            if [ -z "$KEY" ]; then
+                break
+            fi
+            read -r -p "Attribute value: " VALUE
+            ATTRIBUTES="${ATTRIBUTES}record{\"${KEY}\"; \"${VALUE}\"};"
+        done
+        ;;
+esac
 
 ATTRIBUTES="${ATTRIBUTES}}"
 
@@ -50,7 +72,7 @@ echo "  Rarity: $RARITY"
 echo ""
 
 # Call the canister function
-RESULT=$(dfx canister --network "$NETWORK" call "$CANISTER_NAME" addCollectionItem \
+RESULT=$(dfx canister --network "$NETWORK" --identity "$IDENTITY" call "$CANISTER_NAME" addCollectionItem \
   "(\"$NAME\", \"$THUMBNAIL\", \"$IMAGE\", \"$DESCRIPTION\", \"$RARITY\", $ATTRIBUTES)")
 
 if [ $? -eq 0 ]; then
@@ -63,6 +85,10 @@ if [ $? -eq 0 ]; then
         echo ""
         echo "Item ID: $ID"
         echo "View at: /item/$ID"
+        echo "NFC path: /nfc/item/$ID"
+        echo ""
+        echo "Next safe step (plan only):"
+        echo "make nfc-plan NFC_COLLECTION=$CANISTER_NAME NFC_ITEM_ID=$ID NFC_NETWORK=$NETWORK"
     fi
 else
     echo "✗ Failed to add item"

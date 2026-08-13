@@ -3,7 +3,7 @@
 # Script to initialize collection with demo items
 # Usage: ./init_collection.sh [canister_name] [network]
 
-CANISTER_NAME=${1:-collection}
+CANISTER_NAME=${1:-collection_monayolla}
 NETWORK=${2:-local}
 
 echo "Initializing collection with demo items..."

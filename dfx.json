@@ -1,6 +1,10 @@
 {
   "canisters": {
-    "collection": {
+    "collection_monayolla": {
+      "main": "src/main.mo",
+      "type": "motoko"
+    },
+    "collection_bleu": {
       "main": "src/main.mo",
       "type": "motoko"
     }
