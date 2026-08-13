@@ -13,16 +13,6 @@ import Protocol "knitwork_protocol";
 module {
     type Result<T> = Protocol.Result<T>;
 
-    // DORMANT LEGACY TYPE: kept byte-for-byte in State so Collections that
-    // once carried integration-test tags remain safely upgradeable. No
-    // runtime map or public method reads or mutates this field anymore.
-    public type SyntheticTag = {
-        uid : Text;
-        item_id : Nat;
-        proof : Text;
-        last_counter : Nat;
-    };
-
     public type ValidatedScan = {
         meeting_id : Text;
         scan : Protocol.ScanProof;
@@ -56,7 +46,6 @@ module {
 
     public type State = {
         var trusted_hub : ?Principal;
-        var synthetic_tags : [(Text, SyntheticTag)];
         var validated_scans : [(Text, ValidatedScan)];
         var pending_meetings : [(Text, PendingMeeting)];
         var finalization_requests : [(Text, FinalizationRequest)];
@@ -66,7 +55,6 @@ module {
 
     public func init() : State = {
         var trusted_hub = null;
-        var synthetic_tags = [];
         var validated_scans = [];
         var pending_meetings = [];
         var finalization_requests = [];

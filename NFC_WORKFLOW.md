@@ -5,6 +5,14 @@ Le programmateur USB et la station Proof-of-Meet ont deux rôles différents :
 - le programmateur D-Logic relié au PC écrit la puce NTAG 424 DNA ;
 - une station enregistrée dans le Hub lit ensuite la puce, signe le scan et l'envoie au Hub.
 
+> **Déploiement requis pour cette révision :** le dernier champ stable réservé
+> aux anciens tests a été supprimé. Le prochain déploiement de
+> `collection_monayolla` et `collection_bleu` doit donc utiliser le mode
+> `reinstall`, jamais `upgrade`. Ce reinstall remettra les données des deux
+> Collections à zéro ; les Items, routes NFC et CMAC devront ensuite être
+> réimportés. Les déploiements ultérieurs pourront de nouveau utiliser
+> `upgrade` tant que leur schéma stable reste compatible.
+
 ## Préparer une puce pour Item B0
 
 Depuis le dossier `collections` :

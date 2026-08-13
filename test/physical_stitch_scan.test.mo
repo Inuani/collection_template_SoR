@@ -261,37 +261,3 @@ switch (atomicStore.prepareMeeting(trustedHub, duplicateUidBatch)) {
     case (#ok(_)) { assert false };
 };
 assert (routeCounter(atomicRoutes, "nfc/item/0", uid0) == 0);
-
-// Upgrade regression: legacy stable test-tag data can remain present for
-// compatibility, but it must be completely dormant. Matching its old proof
-// cannot bypass the physical route/CMAC validator.
-let legacyRoutes = ProtectedRoutes.RoutesStorage({ var protected_routes = [] });
-let legacyState = Store.init();
-legacyState.synthetic_tags := [
-    (
-        uid0,
-        {
-            uid = uid0;
-            item_id = 0;
-            proof = "legacy-proof";
-            last_counter = 0;
-        },
-    ),
-];
-let legacyStore = bridge(legacyRoutes, legacyState);
-legacyStore.setTrustedHub(?trustedHub);
-switch (
-    legacyStore.prepareMeeting(
-        trustedHub,
-        request(
-            "legacy-proof-must-not-authorize",
-            [scan("legacy-scan", 0, uid0, "legacy-proof")],
-            [0],
-        ),
-    )
-) {
-    case (#err(_)) {};
-    case (#ok(_)) { assert false };
-};
-assert (legacyState.synthetic_tags.size() == 1);
-assert (legacyState.synthetic_tags[0].1.last_counter == 0);
