@@ -6,17 +6,6 @@ import Array "mo:core/Array";
 import Result "mo:core/Result";
 
 module {
-    // Kept only inside stable state so upgrades can preserve the current
-    // Collection data. No public API, route or UI reads or mutates it.
-    public type StitchingRecord = {
-        stitching_id: Text;
-        date: Int;
-        partner_item_ids: [Nat];
-        tokens_earned: Nat;
-    };
-
-    // Internal stable representation. The last two fields are dormant legacy
-    // fields and are deliberately absent from PublicItem.
     public type Item = {
         id: Nat;
         name: Text;
@@ -25,12 +14,10 @@ module {
         description: Text;
         rarity: Text;
         attributes: [(Text, Text)];
-        token_balance: Nat;
-        stitching_history: [StitchingRecord];
     };
 
-    // Clean public representation used by Candid. Proof-of-Meet history is
-    // exposed separately through get_item_meetings.
+    // Public item metadata. Stitch history is exposed separately through
+    // get_item_meetings.
     public type PublicItem = {
         id: Nat;
         name: Text;
@@ -108,8 +95,6 @@ module {
                 description;
                 rarity;
                 attributes;
-                token_balance = 0;
-                stitching_history = [];
             };
 
             Map.add(items, Nat.compare, id, newItem);
@@ -132,7 +117,7 @@ module {
                 case null {
                     #err("Item with ID " # Nat.toText(id) # " not found")
                 };
-                case (?existingItem) {
+                case (?_) {
                     let updatedItem : Item = {
                         id;
                         name;
@@ -141,8 +126,6 @@ module {
                         description;
                         rarity;
                         attributes;
-                        token_balance = existingItem.token_balance; // Preserve existing balance
-                        stitching_history = existingItem.stitching_history; // Preserve history
                     };
                     Map.add(items, Nat.compare, id, updatedItem);
                     updateState();

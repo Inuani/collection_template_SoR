@@ -78,7 +78,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
         confirm_meeting : (KnitworkProtocol.ConfirmMeetingRequest) -> async KnitworkProtocol.MeetingResult;
     };
 
-    // DORMANT STABLE VARIABLE: Preserved exclusively to satisfy Motoko M0169 compatibility checks
+    // Preserved for the Collection theme feature.
     let themeState = Theme.init();
 
     let buttonsState = Buttons.init();
