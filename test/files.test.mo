@@ -1,4 +1,5 @@
 import Blob "mo:core/Blob";
+import Nat "mo:core/Nat";
 import Text "mo:core/Text";
 
 import Files "../src/files";
@@ -63,6 +64,27 @@ switch (storage.uploadFinalize("empty.snk", "", "application/octet-stream")) {
     case (#err(message)) { assert (message == "Cannot store an empty file") };
 };
 assert (storage.getStoredFileCount() == 1);
+
+// The store has no arbitrary file-count ceiling: Collections may associate a
+// distinct package with every Item.
+let manyFilesState = Files.init();
+let manyFilesStorage = Files.FileStorage(manyFilesState);
+var fileIndex = 0;
+while (fileIndex < 12) {
+    manyFilesStorage.upload([1]);
+    switch (
+        manyFilesStorage.uploadFinalize(
+            "card-" # Nat.toText(fileIndex) # ".snk",
+            "test",
+            "application/octet-stream",
+        )
+    ) {
+        case (#err(_)) { assert false };
+        case (#ok(_)) {};
+    };
+    fileIndex += 1;
+};
+assert (manyFilesStorage.getStoredFileCount() == 12);
 
 let streamState : Files.State = {
     var storedFiles = [

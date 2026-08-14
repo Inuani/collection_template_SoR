@@ -11,7 +11,6 @@ import Text "mo:core/Text";
 
 module {
     public let CHUNK_SIZE : Nat = 2_000_000;
-    public let MAX_FILES : Nat = 10;
 
     public type ChunkId = Nat;
     public type FileChunk = [Nat8];
@@ -115,11 +114,6 @@ module {
                 List.clear(buffer);
                 return #err("Invalid file name");
             };
-            if (Map.size(storedFiles) >= MAX_FILES and Option.isNull(Map.get(storedFiles, Text.compare, title))) {
-                List.clear(buffer);
-                return #err("Maximum number of files reached");
-            };
-
             let data = List.toArray(buffer);
             if (data.size() == 0) {
                 List.clear(buffer);
