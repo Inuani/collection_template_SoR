@@ -4,13 +4,15 @@ import HttpContext "mo:liminal/HttpContext";
 import Array "mo:core/Array";
 
 module {
-    // Configure CORS options
+    // Public Knitwork lookups intentionally support arbitrary Collection
+    // origins. No endpoint uses cookies, so credentials stay disabled and the
+    // allowed surface is limited to the methods and header actually required.
     public let corsOptions : CORS.Options = {
-        allowOrigins = []; // Empty = allow all origins (permissive for development)
-        allowMethods = [#get, #post, #put, #delete, #options];
-        allowHeaders = ["Content-Type", "Authorization"];
-        maxAge = ?86400; // 24 hours
-        allowCredentials = true; // Important for session cookies!
+        allowOrigins = []; // Empty means all origins in Liminal.
+        allowMethods = [#get, #post, #options];
+        allowHeaders = ["Content-Type"];
+        maxAge = ?86400;
+        allowCredentials = false;
         exposeHeaders = [];
     };
 

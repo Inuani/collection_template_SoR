@@ -102,8 +102,11 @@ historiques de Stitch. Exemple :
 make nfc-plan NFC_COLLECTION=collection_bleu NFC_ITEM_ID=0 NFC_ROUTE=nfc/item/0
 ```
 
-Cette entrée dédiée pourra plus tard rediriger vers Sneakerweb XP sans modifier
-la page publique ni confondre les paths des images.
+Lorsqu'une carte Sneakerweb est configurée pour l'Item, cette entrée émet après
+le scan valide un claim à usage unique et redirige vers la PWA. Sans carte
+configurée, elle conserve son comportement de repli vers la page publique.
+Le fichier `.snk` n'a pas d'URL GET permanente ; le détail du flux est décrit
+dans [`SNEAKERWEB_PRIVATE_DELIVERY.md`](SNEAKERWEB_PRIVATE_DELIVERY.md).
 
 ## Ajouter une nouvelle pièce
 

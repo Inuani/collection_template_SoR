@@ -2,7 +2,8 @@ import Iter "mo:core/Iter";
 import Text "mo:core/Text";
 import App "mo:liminal/App";
 import HttpContext "mo:liminal/HttpContext";
-import Files "../files";
+import FileAccess "../file_access";
+import FileViews "../file_views";
 import ProtectedRoutes "../nfc_protec_routes";
 import SneakerwebClaims "../sneakerweb_claims";
 import InvalidScan "../utils/invalid_scan";
@@ -51,6 +52,18 @@ module NFCMiddleware {
         };
     };
 
+    func fileAccessUnavailableResponse() : App.HttpResponse {
+        {
+            statusCode = 503;
+            headers = [
+                ("Content-Type", "text/plain; charset=utf-8"),
+                ("Cache-Control", "no-store"),
+            ];
+            body = ?Text.encodeUtf8("Temporary file access is not configured");
+            streamingStrategy = null;
+        };
+    };
+
     func queryParameter(url : Text, key : Text) : ?Text {
         let parts = Iter.toArray(Text.split(url, #char '?'));
         if (parts.size() < 2) return null;
@@ -67,7 +80,7 @@ module NFCMiddleware {
     // session creation live exclusively in the authenticated Knitwork Hub.
     public func createNFCProtectionMiddleware(
         protectedRoutes : ProtectedRoutes.RoutesStorage,
-        fileStorage : Files.FileStorage,
+        fileAccess : FileAccess.Access,
         sneakerwebClaims : SneakerwebClaims.Store,
     ) : App.Middleware {
         {
@@ -95,20 +108,33 @@ module NFCMiddleware {
                             };
                             switch (queryParameter(url, "token")) {
                                 case (?token) {
-                                    if (not fileStorage.validateToken(token, filename)) {
+                                    if (not fileAccess.validateToken(token, filename)) {
                                         return invalidTokenResponse();
                                     };
                                     return await* next();
                                 };
                                 case null {
+                                    // Do not consume an NFC counter while the canister is
+                                    // waiting for its per-installation access secret.
+                                    if (not fileAccess.isConfigured()) {
+                                        return fileAccessUnavailableResponse();
+                                    };
                                     if (not protectedRoutes.verifyRouteAccess(path, url)) {
                                         return invalidScanResponse();
                                     };
-                                    let token = fileStorage.generateToken(filename);
+                                    let token = switch (fileAccess.generateToken(filename)) {
+                                        case (?value) value;
+                                        case null return fileAccessUnavailableResponse();
+                                    };
                                     return {
                                         statusCode = 200;
-                                        headers = [("Content-Type", "text/html")];
-                                        body = ?Text.encodeUtf8(fileStorage.generateHTMLWrapper(filename, token));
+                                        headers = [
+                                            ("Content-Type", "text/html; charset=utf-8"),
+                                            ("Cache-Control", "private, no-store, max-age=0"),
+                                            ("Content-Security-Policy", "default-src 'self'; style-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'"),
+                                            ("X-Content-Type-Options", "nosniff"),
+                                        ];
+                                        body = ?Text.encodeUtf8(FileViews.generateAudioWrapper(filename, token));
                                         streamingStrategy = null;
                                     };
                                 };

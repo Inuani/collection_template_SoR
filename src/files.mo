@@ -1,21 +1,17 @@
-import Text "mo:core/Text";
 import Array "mo:core/Array";
-import Map "mo:core/Map";
-import Result "mo:core/Result";
+import Blob "mo:core/Blob";
 import Iter "mo:core/Iter";
 import List "mo:core/List";
+import Map "mo:core/Map";
 import Nat "mo:core/Nat";
-import Option "mo:core/Option";
-import Nat32 "mo:core/Nat32";
 import Nat8 "mo:core/Nat8";
-import Char "mo:core/Char";
-import Collection "collection";
-import Time "mo:core/Time";
-import Sha256 "mo:sha2/Sha256";
-import Int "mo:core/Int";
-import Blob "mo:core/Blob";
+import Option "mo:core/Option";
+import Result "mo:core/Result";
+import Text "mo:core/Text";
 
 module {
+    public let CHUNK_SIZE : Nat = 2_000_000;
+    public let MAX_FILES : Nat = 10;
 
     public type ChunkId = Nat;
     public type FileChunk = [Nat8];
@@ -23,46 +19,12 @@ module {
     public type StreamingCallbackToken = {
         filename : Text;
         index : Nat;
-        signature : Text; // Token/Signature for validation
+        signature : Text;
     };
 
     public type StreamingCallbackHttpResponse = {
         body : [Nat8];
         token : ?StreamingCallbackToken;
-    };
-
-    // Helper to serialize token to Blob (for HttpAssets compatibility)
-    // In a real app, use a proper serializer like candid or similar
-    // For now, we'll just keep the types distinct and let the router handle conversion if needed
-    // or use a simple text-based encoding if required by the interface.
-    // simpler: The interface in main.mo should use the specific type if Liminal allows,
-    // otherwise we need to encode. Liminal's StreamingStrategy uses `token : Any`.
-    // The previous error showed `token : Blob`.
-    // So we need to convert our Token to Blob.
-
-    public func tokenToBlob(t : StreamingCallbackToken) : [Nat8] {
-        let text = t.filename # "|" # Nat.toText(t.index) # "|" # t.signature;
-        Blob.toArray(Text.encodeUtf8(text));
-    };
-
-    public func tokenFromBlob(b : [Nat8]) : ?StreamingCallbackToken {
-        let text = switch (Text.decodeUtf8(Blob.fromArray(b))) {
-            case null return null;
-            case (?t) t;
-        };
-        let parts = Iter.toArray(Text.split(text, #char '|'));
-        if (parts.size() != 3) return null;
-
-        let index = switch (Nat.fromText(parts[1])) {
-            case null return null;
-            case (?n) n;
-        };
-
-        ?{
-            filename = parts[0];
-            index = index;
-            signature = parts[2];
-        };
     };
 
     public type StoredFile = {
@@ -73,6 +35,7 @@ module {
         data : [FileChunk];
     };
 
+    // Keep this persistent layout unchanged: all deployed file data uses it.
     public type State = {
         var storedFiles : [(Text, StoredFile)];
     };
@@ -81,9 +44,58 @@ module {
         var storedFiles = [];
     };
 
+    public func isFileName(value : Text) : Bool {
+        let characters = Text.toArray(value);
+        if (
+            characters.size() == 0 or characters.size() > 160 or
+            value == "." or value == ".."
+        ) return false;
+        for (character in characters.vals()) {
+            let allowed =
+                (character >= 'a' and character <= 'z') or
+                (character >= 'A' and character <= 'Z') or
+                (character >= '0' and character <= '9') or
+                character == '.' or character == '_' or character == '~' or character == '-';
+            if (not allowed) return false;
+        };
+        true;
+    };
+
+    func isSignature(value : Text) : Bool {
+        let characters = Text.toArray(value);
+        if (characters.size() == 0 or characters.size() > 128) return false;
+        for (character in characters.vals()) {
+            let allowed = (character >= '0' and character <= '9') or
+                (character >= 'a' and character <= 'f') or character == '.';
+            if (not allowed) return false;
+        };
+        true;
+    };
+
+    public func chunkCountForSize(size : Nat) : Nat {
+        if (size == 0) 0 else (size + CHUNK_SIZE - 1) / CHUNK_SIZE;
+    };
+
+    public func tokenToBlob(token : StreamingCallbackToken) : [Nat8] {
+        let text = token.filename # "|" # Nat.toText(token.index) # "|" # token.signature;
+        Blob.toArray(Text.encodeUtf8(text));
+    };
+
+    public func tokenFromBlob(bytes : [Nat8]) : ?StreamingCallbackToken {
+        let text = switch (Text.decodeUtf8(Blob.fromArray(bytes))) {
+            case (?value) value;
+            case null return null;
+        };
+        let parts = Iter.toArray(Text.split(text, #char '|'));
+        if (parts.size() != 3 or not isFileName(parts[0]) or not isSignature(parts[2])) return null;
+        let index = switch (Nat.fromText(parts[1])) {
+            case (?value) value;
+            case null return null;
+        };
+        ?{ filename = parts[0]; index; signature = parts[2] };
+    };
+
     public class FileStorage(state : State) {
-        private let maxFiles : Nat = 10;
-        private let chunkSize : Nat = 2000000;
         private var buffer = List.empty<Nat8>();
         private var storedFiles = Map.fromIter<Text, StoredFile>(
             state.storedFiles.values(),
@@ -91,41 +103,44 @@ module {
         );
 
         public func upload(chunk : [Nat8]) {
-            for (byte in chunk.vals()) {
-                List.add(buffer, byte);
-            };
+            for (byte in chunk.vals()) List.add(buffer, byte);
         };
 
-        public func uploadFinalize(title : Text, artist : Text, contentType : Text) : Result.Result<Text, Text> {
-            if (Map.size(storedFiles) >= maxFiles and Option.isNull(Map.get(storedFiles, Text.compare, title))) {
+        public func uploadFinalize(
+            title : Text,
+            artist : Text,
+            contentType : Text,
+        ) : Result.Result<Text, Text> {
+            if (not isFileName(title)) {
+                List.clear(buffer);
+                return #err("Invalid file name");
+            };
+            if (Map.size(storedFiles) >= MAX_FILES and Option.isNull(Map.get(storedFiles, Text.compare, title))) {
+                List.clear(buffer);
                 return #err("Maximum number of files reached");
             };
 
             let data = List.toArray(buffer);
-            let totalChunks = Nat.max(1, (data.size() + chunkSize) / chunkSize);
-            var chunks : [FileChunk] = [];
-            var i = 0;
-
-            while (i < data.size()) {
-                let end = Nat.min(i + chunkSize, data.size());
-                let chunk = Array.tabulate<Nat8>(end - i, func(j) = data[i + j]);
-                chunks := Array.concat(chunks, [chunk]);
-                i += chunkSize;
+            if (data.size() == 0) {
+                List.clear(buffer);
+                return #err("Cannot store an empty file");
             };
 
+            let totalChunks = chunkCountForSize(data.size());
+            let chunks = Array.tabulate<FileChunk>(
+                totalChunks,
+                func(index) {
+                    let start = index * CHUNK_SIZE;
+                    let end = Nat.min(start + CHUNK_SIZE, data.size());
+                    Array.tabulate<Nat8>(end - start, func(offset) { data[start + offset] });
+                },
+            );
             Map.add(
                 storedFiles,
                 Text.compare,
                 title,
-                {
-                    title;
-                    artist;
-                    contentType;
-                    totalChunks;
-                    data = chunks;
-                },
+                { title; artist; contentType; totalChunks; data = chunks },
             );
-
             state.storedFiles := Iter.toArray(Map.entries(storedFiles));
             List.clear(buffer);
             #ok("Upload successful");
@@ -139,7 +154,7 @@ module {
             artist : Text;
         } {
             switch (Map.get(storedFiles, Text.compare, title)) {
-                case (null) { null };
+                case null null;
                 case (?file) {
                     if (chunkId >= file.data.size()) return null;
                     ?{
@@ -157,60 +172,35 @@ module {
             Option.isSome(Map.get(storedFiles, Text.compare, title));
         };
 
-        // Logic for handling the streaming callback
-        public func processStreamingCallback(token : StreamingCallbackToken) : ?StreamingCallbackHttpResponse {
-            processStreamingCallbackWithValidator(
-                token,
-                func(signature : Text, filename : Text) : Bool {
-                    validateToken(signature, filename);
-                },
-            );
-        };
-
         public func processStreamingCallbackWithValidator(
             token : StreamingCallbackToken,
             validate : (Text, Text) -> Bool,
         ) : ?StreamingCallbackHttpResponse {
-            if (not validate(token.signature, token.filename)) {
-                return null;
-            };
-
-            // 2. Fetch chunk
+            if (not validate(token.signature, token.filename)) return null;
             switch (Map.get(storedFiles, Text.compare, token.filename)) {
-                case (null) return null;
+                case null null;
                 case (?file) {
                     if (token.index >= file.data.size()) return null;
-
-                    let chunk = file.data[token.index];
                     let nextIndex = token.index + 1;
-
-                    let nextToken : ?StreamingCallbackToken = if (nextIndex < file.data.size()) {
+                    let nextToken = if (nextIndex < file.data.size()) {
                         ?{
                             filename = token.filename;
                             index = nextIndex;
-                            signature = token.signature; // Reuse signature (valid for duration)
+                            signature = token.signature;
                         };
-                    } else {
-                        null;
-                    };
-
-                    ?{
-                        body = chunk;
-                        token = nextToken;
-                    };
+                    } else null;
+                    ?{ body = file.data[token.index]; token = nextToken };
                 };
             };
         };
 
         public func listFiles() : [(Text, Text, Text)] {
-            let entries = Iter.toArray(Map.entries(storedFiles));
             Array.map<(Text, StoredFile), (Text, Text, Text)>(
-                entries,
-                func((title, file)) = (title, file.artist, file.contentType),
+                Iter.toArray(Map.entries(storedFiles)),
+                func((title, file)) { (title, file.artist, file.contentType) },
             );
         };
 
-        // Get the first chunk and next token for streaming
         public func getFileStartWithSignature(title : Text, signature : Text) : ?{
             chunk : [Nat8];
             totalChunks : Nat;
@@ -220,51 +210,27 @@ module {
             nextToken : ?StreamingCallbackToken;
         } {
             switch (Map.get(storedFiles, Text.compare, title)) {
-                case (null) { null };
+                case null null;
                 case (?file) {
                     if (file.data.size() == 0) return null;
-
-                    let chunk = file.data[0];
-
-                    let nextToken : ?StreamingCallbackToken = if (file.data.size() > 1) {
-                        ?{
-                            filename = title;
-                            index = 1;
-                            signature = signature;
-                        };
-                    } else {
-                        null;
-                    };
-
+                    let nextToken = if (file.data.size() > 1) {
+                        ?{ filename = title; index = 1; signature };
+                    } else null;
                     ?{
-                        chunk = chunk;
+                        chunk = file.data[0];
                         totalChunks = file.totalChunks;
                         contentType = file.contentType;
                         title = file.title;
                         artist = file.artist;
-                        nextToken = nextToken;
+                        nextToken;
                     };
                 };
             };
         };
 
-        // Existing callers keep the legacy two-minute signed stream. Private
-        // Sneakerweb packages instead pass their server-side package grant as
-        // the streaming signature through getFileStartWithSignature.
-        public func getFileStart(title : Text) : ?{
-            chunk : [Nat8];
-            totalChunks : Nat;
-            contentType : Text;
-            title : Text;
-            artist : Text;
-            nextToken : ?StreamingCallbackToken;
-        } {
-            getFileStartWithSignature(title, generateToken(title));
-        };
-
         public func deleteFile(title : Text) : Bool {
             switch (Map.take(storedFiles, Text.compare, title)) {
-                case (null) { false };
+                case null false;
                 case (?_) {
                     state.storedFiles := Iter.toArray(Map.entries(storedFiles));
                     true;
@@ -274,369 +240,6 @@ module {
 
         public func getStoredFileCount() : Nat {
             Map.size(storedFiles);
-        };
-
-        // Get file as base64 data URL for embedding in HTML
-        public func getFileAsDataUrl(title : Text) : ?Text {
-            switch (Map.get(storedFiles, Text.compare, title)) {
-                case (null) { null };
-                case (?file) {
-                    // Reconstruct full file from chunks
-                    var allBytes : [Nat8] = [];
-                    for (chunk in file.data.vals()) {
-                        allBytes := Array.concat(allBytes, chunk);
-                    };
-
-                    // Convert to base64
-                    let base64 = bytesToBase64(allBytes);
-
-                    // Return as data URL
-                    ?("data:" # file.contentType # ";base64," # base64);
-                };
-            };
-        };
-
-        // Helper function to convert bytes to base64
-        private func bytesToBase64(bytes : [Nat8]) : Text {
-            let base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-            var result = "";
-            var i = 0;
-
-            while (i < bytes.size()) {
-                let b1 = bytes[i];
-                let b2 : Nat8 = if (i + 1 < bytes.size()) bytes[i + 1] else 0;
-                let b3 : Nat8 = if (i + 2 < bytes.size()) bytes[i + 2] else 0;
-
-                let n = (Nat32.fromNat(Nat8.toNat(b1)) << 16) | (Nat32.fromNat(Nat8.toNat(b2)) << 8) | Nat32.fromNat(Nat8.toNat(b3));
-
-                let c1 = Nat32.toNat((n >> 18) & 63);
-                let c2 = Nat32.toNat((n >> 12) & 63);
-                let c3 = Nat32.toNat((n >> 6) & 63);
-                let c4 = Nat32.toNat(n & 63);
-
-                result #= Text.fromChar(charAt(base64Chars, c1));
-                result #= Text.fromChar(charAt(base64Chars, c2));
-
-                if (i + 1 < bytes.size()) {
-                    result #= Text.fromChar(charAt(base64Chars, c3));
-                } else {
-                    result #= "=";
-                };
-
-                if (i + 2 < bytes.size()) {
-                    result #= Text.fromChar(charAt(base64Chars, c4));
-                } else {
-                    result #= "=";
-                };
-
-                i += 3;
-            };
-
-            result;
-        };
-
-        // Stateless Token Generation (Timestamp + Signature)
-        // -------------------------------------------------------------------------
-        private let secret = "LUANDI_SECRET_KEY_QM9"; // Rotate this in production!
-        private let tokenDuration = 120_000_000_000; // 2 minutes in nanoseconds
-
-        public func generateHTMLWrapper(filename : Text, token : Text) : Text {
-            "<!DOCTYPE html>\n"
-            # "<html lang=\"en\">\n"
-            # "<head>\n"
-            # "    <meta charset=\"UTF-8\">\n"
-            # "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
-            # "    <title>Now Playing: " # filename # "</title>\n"
-            # "    <link rel=\"stylesheet\" href=\"/theme.css\">\n"
-            # "</head>\n"
-            # "<body>\n"
-            # "    <div class=\"error-container\">\n"
-            # "        <h2 class=\"item-title\">" # filename # "</h2>\n"
-            # "        <audio controls autoplay>\n"
-            # "            <source src=\"/api/stream/" # filename # "?token=" # token # "\" type=\"audio/mp4\">\n"
-            # "            Your browser does not support the audio element.\n"
-            # "        </audio>\n"
-            # "        <div class=\"timer-container\">\n"
-            # "            Access expires in: <span id=\"timer\">120</span>s\n"
-            # "        </div>\n"
-            # "        <div class=\"status\">SECURE STREAM ACTIVE</div>\n"
-            # "    </div>\n"
-            # "\n"
-            # "    <script>\n"
-            # "        let timeLeft = 120;\n"
-            # "        const timerElement = document.getElementById('timer');\n"
-            # "        const countdown = setInterval(() => {\n"
-            # "            timeLeft--;\n"
-            # "            timerElement.textContent = timeLeft;\n"
-            # "            if (timeLeft <= 0) {\n"
-            # "                clearInterval(countdown);\n"
-            # "                timerElement.textContent = \"EXPIRED\";\n"
-            # "                const statusEl = document.querySelector('.status');\n"
-            # "                statusEl.textContent = \"SESSION EXPIRED. PLEASE SCAN AGAIN.\";\n"
-            # "                statusEl.style.color = \"red\";\n"
-            # "            }\n"
-            # "        }, 1000);\n"
-            # "    </script>\n"
-            # "</body>\n"
-            # "</html>";
-        };
-
-        public func generateToken(filename : Text) : Text {
-            let now = Time.now();
-            let timestamp = Int.toText(now);
-
-            // Generate signature: Hash(filename + timestamp + secret)
-            let input = filename # timestamp # secret;
-            let sha = Blob.toArray(
-                Sha256.fromArray(
-                    #sha256,
-                    Array.map(
-                        Text.toArray(input),
-                        func(c : Char) : Nat8 {
-                            Nat8.fromNat(Nat32.toNat(Char.toNat32(c)));
-                        },
-                    ),
-                )
-            );
-
-            let signatureBase64 = bytesToBase64(sha);
-            let signatureSafe = Text.replace(
-                Text.replace(
-                    Text.replace(signatureBase64, #text "+", "-"),
-                    #text "/",
-                    "_",
-                ),
-                #text "=",
-                "",
-            );
-
-            timestamp # "." # signatureSafe;
-        };
-
-        public func validateToken(signature : Text, expectedFilename : Text) : Bool {
-            let parts = Iter.toArray(Text.split(signature, #char '.'));
-            if (parts.size() != 2) return false;
-
-            let timestampText = parts[0];
-            let providedSignature = parts[1];
-
-            // 1. Check expiration
-            switch (Int.fromText(timestampText)) {
-                case (null) return false;
-                case (?timestamp) {
-                    let now = Time.now();
-                    // Check if token is too old OR from the future (allow 1 minute skew)
-                    if (now > timestamp + tokenDuration or timestamp > now + 120_000_000_000) {
-                        return false;
-                    };
-                };
-            };
-
-            // 2. Verify signature
-            // Reconstruct input using the EXPECTED filename
-            let input = expectedFilename # timestampText # secret;
-            let sha = Blob.toArray(
-                Sha256.fromArray(
-                    #sha256,
-                    Array.map(
-                        Text.toArray(input),
-                        func(c : Char) : Nat8 {
-                            Nat8.fromNat(Nat32.toNat(Char.toNat32(c)));
-                        },
-                    ),
-                )
-            );
-
-            let expectedSignatureBase64 = bytesToBase64(sha);
-            let expectedSignatureSafe = Text.replace(
-                Text.replace(
-                    Text.replace(expectedSignatureBase64, #text "+", "-"),
-                    #text "/",
-                    "_",
-                ),
-                #text "=",
-                "",
-            );
-
-            providedSignature == expectedSignatureSafe;
-        };
-
-        private func charAt(str : Text, index : Nat) : Char {
-            var i = 0;
-            for (c in str.chars()) {
-                if (i == index) return c;
-                i += 1;
-            };
-            ' '; // Should never reach here with valid input
-        };
-
-        // Generate HTML page for file display
-        public func generateFilePage(
-            filename : Text,
-            fileInfo : {
-                chunk : [Nat8];
-                totalChunks : Nat;
-                contentType : Text;
-                title : Text;
-                artist : Text;
-            },
-            collection : Collection.Collection,
-        ) : Text {
-            // Extract item number from filename (e.g., certificat_0 -> 0)
-            let itemNumberText = Text.replace(filename, #text("certificat_"), "");
-
-            // Get item name from collection
-            let itemDisplay = switch (Nat.fromText(itemNumberText)) {
-                case (?itemId) {
-                    switch (collection.getItem(itemId)) {
-                        case (?item) item.name;
-                        case null itemNumberText;
-                    };
-                };
-                case null itemNumberText;
-            };
-
-            // Generate HTML based on file size (single chunk vs multi-chunk)
-            if (fileInfo.totalChunks == 1) {
-                generateSingleChunkPage(filename, itemNumberText, itemDisplay, fileInfo);
-            } else {
-                generateMultiChunkPage(filename, itemNumberText, itemDisplay, fileInfo);
-            };
-        };
-
-        // Generate page for single chunk files (< 2MB)
-        private func generateSingleChunkPage(
-            filename : Text,
-            itemNumberText : Text,
-            itemDisplay : Text,
-            fileInfo : {
-                chunk : [Nat8];
-                totalChunks : Nat;
-                contentType : Text;
-                title : Text;
-                artist : Text;
-            },
-        ) : Text {
-            "<!DOCTYPE html><html><head>"
-            # "<meta charset='UTF-8'>"
-            # "<meta name='viewport' content='width=device-width,initial-scale=1.0'>"
-            # "<title>" # filename # "</title>"
-            # "<style>"
-            # "*{margin:0;padding:0;box-sizing:border-box;}"
-            # "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#fff;min-height:100vh;display:flex;flex-direction:column;}"
-            # ".container{flex:1;display:flex;flex-direction:column;width:100%;max-width:100vw;padding:20px;}"
-            # ".back-link{display:inline-block;margin-bottom:1rem;color:#2563eb;text-decoration:none;font-weight:500;}"
-            # ".back-link:hover{text-decoration:underline;}"
-            # ".certificate-text{text-align:center;margin-bottom:1rem;font-size:16px;color:#1f2937;}"
-            # ".media-container{flex:1;display:flex;justify-content:center;align-items:center;background:#fff;}"
-            # "#media{width:100%;height:100%;display:flex;justify-content:center;align-items:center;}"
-            # "img{max-width:100%;max-height:calc(100vh - 120px);width:auto;height:auto;object-fit:contain;display:block;}"
-            # "audio,video{max-width:100%;}"
-            # "</style>"
-            # "</head><body>"
-            # "<div class='container'>"
-            # "<a href='/item/" # itemNumberText # "' class='back-link'>Retour à " # itemDisplay # "</a>"
-            # "<div class='certificate-text'>Scan valide - certificat d'authenticité pour l'item " # itemDisplay # " :</div>"
-            # "<div class='media-container'><div id='media'></div></div>"
-            # "</div>"
-            # "<script>"
-            # "const filename='" # filename # "';"
-            # "const contentType='" # fileInfo.contentType # "';"
-            # "const baseUrl=window.location.protocol+'//'+window.location.host;"
-            # "async function load(){"
-            # "const media=document.getElementById('media');"
-            # "try{"
-            # "const url=baseUrl+'/files/'+filename+'/chunk/0';"
-            # "const response=await fetch(url);"
-            # "if(!response.ok)throw new Error('Failed to load: HTTP '+response.status);"
-            # "const arrayBuffer=await response.arrayBuffer();"
-            # "const bytes=new Uint8Array(arrayBuffer);"
-            # "const blob=new Blob([bytes],{type:contentType});"
-            # "const blobUrl=URL.createObjectURL(blob);"
-            # "let element;"
-            # "if(contentType.startsWith('image/')){element=document.createElement('img');}"
-            # "else if(contentType.startsWith('audio/')){element=document.createElement('audio');element.controls=true;}"
-            # "else if(contentType.startsWith('video/')){element=document.createElement('video');element.controls=true;}"
-            # "else{element=document.createElement('img');}"
-            # "element.src=blobUrl;"
-            # "media.appendChild(element);"
-            # "}catch(e){console.error(e);}"
-            # "}"
-            # "load();"
-            # "</script>"
-            # "</body></html>";
-        };
-
-        // Generate page for multi-chunk files (> 2MB)
-        private func generateMultiChunkPage(
-            filename : Text,
-            itemNumberText : Text,
-            itemDisplay : Text,
-            fileInfo : {
-                chunk : [Nat8];
-                totalChunks : Nat;
-                contentType : Text;
-                title : Text;
-                artist : Text;
-            },
-        ) : Text {
-            "<!DOCTYPE html><html><head>"
-            # "<meta charset='UTF-8'>"
-            # "<meta name='viewport' content='width=device-width,initial-scale=1.0'>"
-            # "<title>" # filename # "</title>"
-            # "<style>"
-            # "*{margin:0;padding:0;box-sizing:border-box;}"
-            # "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#fff;min-height:100vh;display:flex;flex-direction:column;}"
-            # ".container{flex:1;display:flex;flex-direction:column;width:100%;max-width:100vw;padding:20px;}"
-            # ".back-link{display:inline-block;margin-bottom:1rem;color:#2563eb;text-decoration:none;font-weight:500;}"
-            # ".back-link:hover{text-decoration:underline;}"
-            # ".certificate-text{text-align:center;margin-bottom:1rem;font-size:16px;color:#1f2937;}"
-            # ".media-container{flex:1;display:flex;justify-content:center;align-items:center;background:#fff;}"
-            # "#media{width:100%;height:100%;display:flex;justify-content:center;align-items:center;}"
-            # "img{max-width:100%;max-height:calc(100vh - 120px);width:auto;height:auto;object-fit:contain;display:block;}"
-            # "audio,video{max-width:100%;}"
-            # "</style>"
-            # "</head><body>"
-            # "<div class='container'>"
-            # "<a href='/item/" # itemNumberText # "' class='back-link'>Retour à " # itemDisplay # "</a>"
-            # "<div class='certificate-text'>Scan valide - certificat d'authenticité pour l'item " # itemDisplay # " :</div>"
-            # "<div class='media-container'><div id='media'></div></div>"
-            # "</div>"
-            # "<script>"
-            # "const filename='" # filename # "';"
-            # "const totalChunks=" # Nat.toText(fileInfo.totalChunks) # ";"
-            # "const contentType='" # fileInfo.contentType # "';"
-            # "const baseUrl=window.location.protocol+'//'+window.location.host;"
-            # "async function load(){"
-            # "const media=document.getElementById('media');"
-            # "try{"
-            # "const chunks=[];"
-            # "for(let i=0;i<totalChunks;i++){"
-            # "const url=baseUrl+'/files/'+filename+'/chunk/'+i;"
-            # "const response=await fetch(url);"
-            # "if(!response.ok)throw new Error('Chunk '+i+' failed: HTTP '+response.status);"
-            # "const arrayBuffer=await response.arrayBuffer();"
-            # "const bytes=new Uint8Array(arrayBuffer);"
-            # "chunks.push(bytes);"
-            # "}"
-            # "const totalBytes=chunks.reduce((acc,chunk)=>acc+chunk.length,0);"
-            # "const combined=new Uint8Array(totalBytes);"
-            # "let offset=0;"
-            # "for(const chunk of chunks){combined.set(chunk,offset);offset+=chunk.length;}"
-            # "const blob=new Blob([combined],{type:contentType});"
-            # "const blobUrl=URL.createObjectURL(blob);"
-            # "let element;"
-            # "if(contentType.startsWith('image/')){element=document.createElement('img');}"
-            # "else if(contentType.startsWith('audio/')){element=document.createElement('audio');element.controls=true;}"
-            # "else if(contentType.startsWith('video/')){element=document.createElement('video');element.controls=true;}"
-            # "else{element=document.createElement('img');}"
-            # "element.src=blobUrl;"
-            # "media.appendChild(element);"
-            # "}catch(e){console.error(e);}"
-            # "}"
-            # "load();"
-            # "</script>"
-            # "</body></html>";
         };
     };
 };

@@ -1,6 +1,7 @@
 import Liminal "mo:liminal";
 import Array "mo:core/Array";
 import Principal "mo:core/Principal";
+import Random "mo:core/Random";
 import Error "mo:core/Error";
 import AssetsMiddleware "mo:liminal/Middleware/Assets";
 import CORSMiddleware "middleware/cors";
@@ -9,6 +10,7 @@ import HttpAssets "mo:http-assets@0";
 import AssetCanister "mo:liminal/AssetCanister";
 import ProtectedRoutes "nfc_protec_routes";
 import Routes "routes";
+import FileAccess "file_access";
 import Files "files";
 import Collection "collection";
 import Result "mo:core/Result";
@@ -16,7 +18,6 @@ import RouterMiddleware "mo:liminal/Middleware/Router";
 import Blob "mo:base/Blob";
 import Theme "utils/theme";
 import Buttons "utils/buttons";
-import FileService "services/file_service";
 import CollectionService "services/collection_service";
 import AssetService "services/asset_service";
 import KnitworkProtocol "knitwork_protocol";
@@ -40,6 +41,11 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     let fileStorageState = Files.init();
     transient let file_storage = Files.FileStorage(fileStorageState);
+
+    // This secret is generated inside the canister and survives upgrades. It
+    // replaces the repository-wide static key formerly used by file URLs.
+    let fileAccessState = FileAccess.init();
+    transient let fileAccess = FileAccess.Access(fileAccessState);
 
     let collectionState = Collection.init();
     transient let collection = Collection.Collection(collectionState);
@@ -85,11 +91,11 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     // Preserved for the Collection theme feature.
     let themeState = Theme.init();
+    transient let themeManager = Theme.ThemeManager(themeState);
 
     let buttonsState = Buttons.init();
     transient let buttonsManager = Buttons.ButtonsManager(buttonsState);
 
-    transient let fileService = FileService.make(file_storage);
     transient let collectionService = CollectionService.make(initializer, collection);
 
     transient let setPermissions : HttpAssets.SetPermissions = {
@@ -127,7 +133,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                             } else if (sneakerwebClaims.isPrivatePackageFile(filename)) {
                                 false;
                             } else {
-                                file_storage.validateToken(signature, filename);
+                                fileAccess.validateToken(signature, filename);
                             };
                         },
                     )
@@ -153,7 +159,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
             CORSMiddleware.createCORSMiddleware(),
             NFCMiddleware.createNFCProtectionMiddleware(
                 protected_routes_storage,
-                file_storage,
+                fileAccess,
                 sneakerwebClaims,
             ),
             RouterMiddleware.new(
@@ -165,6 +171,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                         knitworkStore.getItemMeetings(itemId);
                     },
                     file_storage,
+                    fileAccess,
                     sneakerwebClaims,
                 )
             ),
@@ -202,12 +209,12 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     public shared ({ caller }) func upload(chunk : [Nat8]) : async () {
         assert AccessControl.isInitializer(caller, initializer);
-        fileService.upload(chunk);
+        file_storage.upload(chunk);
     };
 
     public shared ({ caller }) func uploadFinalize(title : Text, artist : Text, contentType : Text) : async Result.Result<Text, Text> {
         assert AccessControl.isInitializer(caller, initializer);
-        fileService.uploadFinalize(title, artist, contentType);
+        file_storage.uploadFinalize(title, artist, contentType);
     };
 
     public shared query ({ caller }) func getFileChunk(title : Text, chunkId : ChunkId) : async ?{
@@ -218,7 +225,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
         artist : Text;
     } {
         assert AccessControl.isInitializer(caller, initializer);
-        fileService.getFileChunk(title, chunkId);
+        file_storage.getFileChunk(title, chunkId);
     };
 
     public shared query ({ caller }) func getFileStart(title : Text) : async ?{
@@ -230,22 +237,38 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
         nextToken : ?Files.StreamingCallbackToken;
     } {
         assert AccessControl.isInitializer(caller, initializer);
-        file_storage.getFileStart(title);
+        switch (fileAccess.generateToken(title)) {
+            case null null;
+            case (?signature) file_storage.getFileStartWithSignature(title, signature);
+        };
     };
 
     public shared query ({ caller }) func listFiles() : async [(Text, Text, Text)] {
         assert AccessControl.isInitializer(caller, initializer);
-        fileService.listFiles();
+        file_storage.listFiles();
     };
 
     public shared ({ caller }) func deleteFile(title : Text) : async Bool {
         assert AccessControl.isInitializer(caller, initializer);
-        fileService.deleteFile(title);
+        file_storage.deleteFile(title);
     };
 
     public shared query ({ caller }) func getStoredFileCount() : async Nat {
         assert AccessControl.isInitializer(caller, initializer);
-        fileService.getStoredFileCount();
+        file_storage.getStoredFileCount();
+    };
+
+    public shared ({ caller }) func rotate_file_access_secret() : async () {
+        assert AccessControl.isInitializer(caller, initializer);
+        let secret = await Random.blob();
+        assert fileAccess.installSecret(secret);
+    };
+
+    public shared query ({ caller }) func get_file_access_status() : async {
+        configured : Bool;
+    } {
+        assert AccessControl.isInitializer(caller, initializer);
+        { configured = fileAccess.isConfigured() };
     };
 
     // ============================================
@@ -565,6 +588,20 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     // ============================================
     // THEME MANAGEMENT FUNCTIONS (Admin Only)
     // ============================================
+
+    public shared ({ caller }) func setTheme(primary : Text, secondary : Text) : async Theme.Theme {
+        assert AccessControl.isInitializer(caller, initializer);
+        themeManager.setTheme(primary, secondary);
+    };
+
+    public query func getTheme() : async Theme.Theme {
+        themeManager.getTheme();
+    };
+
+    public shared ({ caller }) func resetTheme() : async Theme.Theme {
+        assert AccessControl.isInitializer(caller, initializer);
+        themeManager.resetTheme();
+    };
 
     public shared ({ caller }) func addButton(buttonText : Text, buttonLink : Text) : async Nat {
         assert (caller == initializer);
