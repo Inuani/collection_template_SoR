@@ -1,5 +1,11 @@
 # Les Collections d'Evorev: A Marketplace for Autonomous Artifacts
 
+> **Statut : vision produit historique.** Discord, guardianship, marketplace,
+> transferts et modèle Sanctuary décrivent des pistes de produit, pas l'état
+> actuellement implémenté. Pour le système actif, commencer par
+> [`README.md`](README.md), [`NFC_WORKFLOW.md`](NFC_WORKFLOW.md) et les guides du
+> Hub dans le dépôt `proof_of_meet`.
+
 ## 1. Core Vision: A Web of Trust for Objects (WoT) & Social Network
 
 "Les Collections d'Evorev" is a dual-layered system:

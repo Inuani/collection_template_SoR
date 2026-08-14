@@ -1,5 +1,10 @@
 # Workflow NFC des Collections
 
+> Pour créer et associer une carte `.snk` à un Item déjà équipé, suivre
+> [`../sneakerweb_xp/SNK_WORKFLOW.md`](../sneakerweb_xp/SNK_WORKFLOW.md).
+> Ce document reste la référence pour la création de l'Item et la programmation
+> physique de sa puce NFC.
+
 Le programmateur USB et la station Proof-of-Meet ont deux rôles différents :
 
 - le programmateur D-Logic relié au PC écrit la puce NTAG 424 DNA ;

@@ -1,5 +1,10 @@
 # Livraison privée Sneakerweb
 
+> Procédure opérationnelle complète :
+> [`../sneakerweb_xp/SNK_WORKFLOW.md`](../sneakerweb_xp/SNK_WORKFLOW.md).
+> Le présent document détaille surtout la sécurité et l'implémentation côté
+> Collection.
+
 Une Collection peut associer un fichier `.snk` à un Item NFC sans publier ce
 fichier comme asset HTTP. Aucun compte, Internet Identity ou clé utilisateur
 n'est nécessaire.

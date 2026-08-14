@@ -23,6 +23,8 @@ NFC_BATCH_SIZE ?= 1000
 NFC_KEY_MODE ?=
 NFC_RANDOM_KEY ?=
 NFC_PARAM ?= item_id=$(NFC_ITEM_ID)
+IC_IDENTITY ?= raygen
+IC_COLLECTIONS := collection_monayolla collection_bleu collection_heloise
 # Keep an independent Principal allowlist for live NFC enrollment. This makes a
 # mistyped or accidentally remapped dfx alias fail before any tag/canister write.
 NFC_EXPECTED_CANISTER_ID_collection_monayolla := 4623w-oqaaa-aaaak-qtrjq-cai
@@ -66,7 +68,7 @@ sync:
 Isync:
 	icx-asset --replica https://ic0.app --pem ~/.config/dfx/identity/raygen/identity.pem sync $(CANISTER_ID) ./public
 
-.PHONY: require-nfc-collection require-nfc-item item-add nfc-plan nfc-program protect protect_ic
+.PHONY: require-nfc-collection require-nfc-item item-add nfc-plan nfc-program protect protect_ic ic-health
 
 require-nfc-collection:
 	@test -n "$(strip $(NFC_COLLECTION))" || { \
@@ -101,6 +103,15 @@ protect: nfc-plan
 
 protect_ic: NFC_NETWORK = ic
 protect_ic: nfc-plan
+
+# Read-only production summary. It intentionally avoids methods that disclose
+# UID or CMAC material.
+ic-health:
+	@for canister in $(IC_COLLECTIONS); do \
+		echo "== $$canister =="; \
+		dfx canister --network ic --identity $(IC_IDENTITY) status $$canister; \
+		dfx canister snapshot list --network ic --identity $(IC_IDENTITY) $$canister; \
+	done
 
 reinstall:
 	dfx deploy $(CANISTER_NAME) --mode reinstall
