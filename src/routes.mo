@@ -71,7 +71,6 @@ module Routes {
             statusCode;
             headers = [
                 ("Content-Type", "application/json; charset=utf-8"),
-                ("Access-Control-Allow-Origin", "*"),
                 ("Cache-Control", "no-store"),
                 ("Pragma", "no-cache"),
                 ("X-Content-Type-Options", "nosniff"),
@@ -199,7 +198,6 @@ module Routes {
                                             ("Content-Disposition", "attachment; filename=\"sneakerweb-card.snk\""),
                                             ("Cache-Control", "private, no-store, max-age=0"),
                                             ("Pragma", "no-cache"),
-                                            ("Access-Control-Allow-Origin", "*"),
                                             ("X-Content-Type-Options", "nosniff"),
                                         ];
                                         body = ?Blob.fromArray(start.chunk);
