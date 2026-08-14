@@ -155,4 +155,8 @@ module {
     public func getUid(url : Text) : ?Text {
         queryParameter(url, "uid");
     };
+
+    public func getCmac(url : Text) : ?Text {
+        queryParameter(url, "cmac");
+    };
 };

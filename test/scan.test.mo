@@ -86,3 +86,19 @@ let otherPhysicalScan : ProtectedRoutes.PhysicalScanAttempt = {
 };
 assert (not atomicRoutes.commitPhysicalScans([physicalScan, otherPhysicalScan]));
 assert (atomicRoutes.validatePhysicalScan(physicalScan));
+
+// The direct route path returns the validated values while consuming the
+// counter exactly once. This is what the short-lived Sneakerweb claim uses.
+let directRoutes = ProtectedRoutes.RoutesStorage({ var protected_routes = [] });
+assert (directRoutes.addProtectedRoute("nfc/item/0"));
+assert (directRoutes.updateRouteCmacs("nfc/item/0", "04958CAA5E5E80", [firstHash]));
+switch (directRoutes.consumeRouteAccess("nfc/item/0", firstUrl)) {
+    case null { assert false };
+    case (?consumed) {
+        assert (consumed.path == "nfc/item/0");
+        assert (consumed.uid == "04958CAA5E5E80");
+        assert (consumed.counter == 1);
+        assert (consumed.cmac == "8252B9CD8D6A36F9");
+    };
+};
+assert (directRoutes.consumeRouteAccess("nfc/item/0", firstUrl) == null);

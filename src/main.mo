@@ -22,6 +22,7 @@ import AssetService "services/asset_service";
 import KnitworkProtocol "knitwork_protocol";
 import KnitworkStore "knitwork_store";
 import AccessControl "access_control";
+import SneakerwebClaims "sneakerweb_claims";
 
 shared ({ caller = initializer }) persistent actor class Actor() = self {
 
@@ -33,6 +34,9 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     let protectedRoutesState = ProtectedRoutes.init();
     transient let protected_routes_storage = ProtectedRoutes.RoutesStorage(protectedRoutesState);
+
+    let sneakerwebClaimsState = SneakerwebClaims.init();
+    transient let sneakerwebClaims = SneakerwebClaims.Store(sneakerwebClaimsState, canisterId);
 
     let fileStorageState = Files.init();
     transient let file_storage = Files.FileStorage(fileStorageState);
@@ -114,7 +118,20 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
         switch (Files.tokenFromBlob(Blob.toArray(token))) {
             case (null) { ({ body = Blob.fromArray([]); token = null }) };
             case (?t) {
-                switch (file_storage.processStreamingCallback(t)) {
+                switch (
+                    file_storage.processStreamingCallbackWithValidator(
+                        t,
+                        func(signature : Text, filename : Text) : Bool {
+                            if (sneakerwebClaims.isPackageAuthorized(signature, filename)) {
+                                true;
+                            } else if (sneakerwebClaims.isPrivatePackageFile(filename)) {
+                                false;
+                            } else {
+                                file_storage.validateToken(signature, filename);
+                            };
+                        },
+                    )
+                ) {
                     case (null) ({ body = Blob.fromArray([]); token = null });
                     case (?res) {
                         let nextToken = switch (res.token) {
@@ -134,7 +151,11 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
     transient let app = Liminal.App({
         middleware = [
             CORSMiddleware.createCORSMiddleware(),
-            NFCMiddleware.createNFCProtectionMiddleware(protected_routes_storage, file_storage),
+            NFCMiddleware.createNFCProtectionMiddleware(
+                protected_routes_storage,
+                file_storage,
+                sneakerwebClaims,
+            ),
             RouterMiddleware.new(
                 Routes.routerConfig(
                     canisterId,
@@ -144,6 +165,7 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
                         knitworkStore.getItemMeetings(itemId);
                     },
                     file_storage,
+                    sneakerwebClaims,
                 )
             ),
             AssetsMiddleware.new(assetMiddlewareConfig),
@@ -271,7 +293,13 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
             case (?message) { return #err(message) };
             case null {};
         };
-        collectionService.deleteItem(caller, id);
+        switch (collectionService.deleteItem(caller, id)) {
+            case (#ok()) {
+                ignore sneakerwebClaims.removeCard(id);
+                #ok();
+            };
+            case (#err(message)) { #err(message) };
+        };
     };
 
     public query func getCollectionItem(id : Nat) : async ?Collection.PublicItem {
@@ -479,6 +507,59 @@ shared ({ caller = initializer }) persistent actor class Actor() = self {
 
     public query func listProtectedRoutesSummary() : async [(Text, Nat)] {
         protected_routes_storage.listProtectedRoutesSummary();
+    };
+
+    // ============================================
+    // SNEAKERWEB NFC CLAIMS (no user identity)
+    // ============================================
+
+    public shared ({ caller }) func set_sneakerweb_pwa_url(
+        url : Text
+    ) : async Result.Result<(), Text> {
+        assert AccessControl.isInitializer(caller, initializer);
+        if (sneakerwebClaims.setPwaImportUrl(url)) {
+            #ok();
+        } else {
+            #err("PWA URL must use HTTPS (or localhost for development) and contain no fragment");
+        };
+    };
+
+    public shared ({ caller }) func configure_sneakerweb_card(
+        item_id : Nat,
+        domain : Text,
+        file_name : Text,
+    ) : async Result.Result<(), Text> {
+        assert AccessControl.isInitializer(caller, initializer);
+        switch (collection.getItem(item_id)) {
+            case null { return #err("Item with ID " # debug_show (item_id) # " not found") };
+            case (?_) {};
+        };
+        if (not file_storage.hasFile(file_name)) {
+            return #err("Private file '" # file_name # "' not found; upload it before configuring the card");
+        };
+        if (sneakerwebClaims.configureCard(item_id, domain, file_name)) {
+            #ok();
+        } else {
+            #err("domain must be lowercase SHA-256 hex and file_name must use only letters, digits, dot, dash, underscore, or tilde");
+        };
+    };
+
+    public shared ({ caller }) func remove_sneakerweb_card(
+        item_id : Nat
+    ) : async Bool {
+        assert AccessControl.isInitializer(caller, initializer);
+        sneakerwebClaims.removeCard(item_id);
+    };
+
+    public shared query ({ caller }) func get_sneakerweb_claim_config() : async {
+        pwa_import_url : Text;
+        cards : [SneakerwebClaims.CardConfig];
+    } {
+        assert AccessControl.isInitializer(caller, initializer);
+        {
+            pwa_import_url = sneakerwebClaims.getPwaImportUrl();
+            cards = sneakerwebClaims.listCards();
+        };
     };
 
     // ============================================

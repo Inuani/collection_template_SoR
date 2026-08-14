@@ -153,10 +153,25 @@ module {
             };
         };
 
+        public func hasFile(title : Text) : Bool {
+            Option.isSome(Map.get(storedFiles, Text.compare, title));
+        };
+
         // Logic for handling the streaming callback
         public func processStreamingCallback(token : StreamingCallbackToken) : ?StreamingCallbackHttpResponse {
-            // 1. Validate signature
-            if (not validateToken(token.signature, token.filename)) {
+            processStreamingCallbackWithValidator(
+                token,
+                func(signature : Text, filename : Text) : Bool {
+                    validateToken(signature, filename);
+                },
+            );
+        };
+
+        public func processStreamingCallbackWithValidator(
+            token : StreamingCallbackToken,
+            validate : (Text, Text) -> Bool,
+        ) : ?StreamingCallbackHttpResponse {
+            if (not validate(token.signature, token.filename)) {
                 return null;
             };
 
@@ -196,7 +211,7 @@ module {
         };
 
         // Get the first chunk and next token for streaming
-        public func getFileStart(title : Text) : ?{
+        public func getFileStartWithSignature(title : Text, signature : Text) : ?{
             chunk : [Nat8];
             totalChunks : Nat;
             contentType : Text;
@@ -210,7 +225,6 @@ module {
                     if (file.data.size() == 0) return null;
 
                     let chunk = file.data[0];
-                    let signature = generateToken(title); // Generate fresh token for the stream
 
                     let nextToken : ?StreamingCallbackToken = if (file.data.size() > 1) {
                         ?{
@@ -232,6 +246,20 @@ module {
                     };
                 };
             };
+        };
+
+        // Existing callers keep the legacy two-minute signed stream. Private
+        // Sneakerweb packages instead pass their server-side package grant as
+        // the streaming signature through getFileStartWithSignature.
+        public func getFileStart(title : Text) : ?{
+            chunk : [Nat8];
+            totalChunks : Nat;
+            contentType : Text;
+            title : Text;
+            artist : Text;
+            nextToken : ?StreamingCallbackToken;
+        } {
+            getFileStartWithSignature(title, generateToken(title));
         };
 
         public func deleteFile(title : Text) : Bool {

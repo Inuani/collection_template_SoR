@@ -29,6 +29,11 @@ module {
         cmac : Text;
     };
 
+    // A validated direct scan is returned to the caller which performs the
+    // next action (for example issuing a short-lived Sneakerweb claim). The
+    // CMAC itself is never persisted outside the protected-route store.
+    public type ConsumedScan = PhysicalScanAttempt;
+
     public type State = {
         var protected_routes : [(Text, ProtectedRoute)];
     };
@@ -339,33 +344,47 @@ module {
             };
         };
 
-        public func verifyRouteAccess(path : Text, url : Text) : Bool {
+        public func consumeRouteAccess(path : Text, url : Text) : ?ConsumedScan {
             switch (findRouteEntry(path)) {
                 case (?(_, route)) {
-                    // Extract UID from URL
-                    let uidOpt = Scan.getUid(url);
-                    switch(uidOpt) {
+                    switch(Scan.getUid(url)) {
                         case (?uid) {
                              switch(findTag(route.tags, uid)) {
                                 case (?tagData) {
                                     let counter = Scan.scan(tagData.cmacs_, url, tagData.scan_count_);
                                     if (counter > 0) {
-                                        ignore updateScanCount(path, uid, counter);
-                                        true;
+                                        let cmac = switch (Scan.getCmac(url)) {
+                                            case (?value) value;
+                                            case null return null;
+                                        };
+                                        if (not updateScanCount(path, uid, counter)) return null;
+                                        ?{
+                                            path = switch (canonicalRoutePath(path)) {
+                                                case (?canonical) canonical;
+                                                case null return null;
+                                            };
+                                            uid;
+                                            counter;
+                                            cmac;
+                                        };
                                     } else {
-                                        false;
+                                        null;
                                     };
                                 };
-                                case null { false }; // Tag not registered for this route
+                                case null { null }; // Tag not registered for this route
                             }
                         };
-                        case null { false }; // No UID in URL
+                        case null { null }; // No UID in URL
                     }
                 };
                 case null {
-                    false;
+                    null;
                 };
             };
+        };
+
+        public func verifyRouteAccess(path : Text, url : Text) : Bool {
+            Option.isSome(consumeRouteAccess(path, url));
         };
 
         public func listProtectedRoutes() : [(Text, ProtectedRoute)] {
