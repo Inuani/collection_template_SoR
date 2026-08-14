@@ -20,7 +20,8 @@ NFC_NETWORK ?= local
 NFC_IDENTITY ?= raygen
 NFC_CMAC_COUNT ?= $(CMAC_COUNT)
 NFC_BATCH_SIZE ?= 1000
-NFC_RANDOM_KEY ?= 0
+NFC_KEY_MODE ?=
+NFC_RANDOM_KEY ?=
 NFC_PARAM ?= item_id=$(NFC_ITEM_ID)
 # Keep an independent Principal allowlist for live NFC enrollment. This makes a
 # mistyped or accidentally remapped dfx alias fail before any tag/canister write.
@@ -28,7 +29,9 @@ NFC_EXPECTED_CANISTER_ID_collection_monayolla := 4623w-oqaaa-aaaak-qtrjq-cai
 NFC_EXPECTED_CANISTER_ID_collection_bleu := ubnuj-uyaaa-aaaak-qudbq-cai
 NFC_EXPECTED_CANISTER_ID_collection_heloise := jmp6g-oqaaa-aaaak-qug3q-cai
 NFC_EXPECTED_CANISTER_ID ?= $(NFC_EXPECTED_CANISTER_ID_$(NFC_COLLECTION))
-NFC_KEY_ARGS = $(if $(filter 1 yes true,$(NFC_RANDOM_KEY)),--random-key,)
+NFC_LEGACY_KEY_MODE = $(if $(filter 1 yes true,$(NFC_RANDOM_KEY)),random,$(if $(filter 0 no false,$(NFC_RANDOM_KEY)),zero,invalid))
+NFC_RESOLVED_KEY_MODE = $(if $(strip $(NFC_KEY_MODE)),$(NFC_KEY_MODE),$(if $(strip $(NFC_RANDOM_KEY)),$(NFC_LEGACY_KEY_MODE),))
+NFC_KEY_ARGS = $(if $(strip $(NFC_RESOLVED_KEY_MODE)),--key-mode $(NFC_RESOLVED_KEY_MODE),)
 # Live aliases are pinned to their known IC Principals. Local canisters receive
 # different ephemeral Principals, so the live allowlist must not be applied.
 NFC_EXPECTED_ARGS = $(if $(filter ic,$(NFC_NETWORK)),$(if $(strip $(NFC_EXPECTED_CANISTER_ID)),--expected-canister-id $(NFC_EXPECTED_CANISTER_ID),),)

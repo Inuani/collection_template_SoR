@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 from ctypes import c_ubyte, c_uint, c_uint16, memset, sizeof
+from datetime import datetime, timezone
 from pathlib import Path
 
 import batch_cmacs
@@ -25,6 +26,9 @@ CANISTER_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 PARAM_RE = re.compile(r"^[A-Za-z0-9_.~-]+=[A-Za-z0-9_.~-]+$")
 ROUTE_RE = re.compile(r"^[A-Za-z0-9._~/-]+$")
 DEFAULT_KEY_HEX = "0" * 32
+KEY_MODE_RANDOM = "random"
+KEY_MODE_ZERO = "zero"
+KEY_MODES = (KEY_MODE_RANDOM, KEY_MODE_ZERO)
 
 
 class EnrollmentError(RuntimeError):
@@ -190,19 +194,65 @@ def base_url(canister_id: str, network: str, route: str) -> str:
     return f"http://{canister_id}.raw.localhost:4943/{route}"
 
 
-def save_random_key(key_hex: str, canister: str, uid: str, key_dir: Path | None) -> Path:
+def requested_key_mode(key_mode: str | None, legacy_random_key: bool) -> str | None:
+    if legacy_random_key:
+        if key_mode not in (None, KEY_MODE_RANDOM):
+            raise EnrollmentError("--random-key cannot be combined with --key-mode zero")
+        return KEY_MODE_RANDOM
+    return key_mode
+
+
+def prompt_key_mode() -> str:
+    print("\nAES key mode")
+    print("============")
+    print("1. random - unique random key, saved in a private Item key file (recommended)")
+    print("2. zero   - keep 00000000000000000000000000000000 (test only)")
+    while True:
+        choice = input("Choose [1]: ").strip().lower()
+        if choice in {"", "1", "random", "r"}:
+            return KEY_MODE_RANDOM
+        if choice in {"2", "zero", "z"}:
+            return KEY_MODE_ZERO
+        print("Please type 1 for random or 2 for zero.")
+
+
+def save_random_key(
+    key_hex: str,
+    canister: str,
+    canister_id: str,
+    network: str,
+    item_id: int,
+    item_name: str,
+    uid: str,
+    route: str,
+    key_dir: Path | None,
+) -> Path:
     directory = key_dir or (Path.home() / ".local" / "share" / "evorev" / "nfc-keys")
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     try:
         directory.chmod(0o700)
     except OSError:
         pass
-    path = directory / f"{canister}-{uid}.key"
+    path = directory / f"{canister}-item-{item_id}-{uid}.key"
     if path.exists():
         raise EnrollmentError(f"key file already exists; refusing to overwrite it: {path}")
+    key_record = {
+        "schema_version": 1,
+        "key_mode": KEY_MODE_RANDOM,
+        "aes_key_0_hex": key_hex,
+        "collection_alias": canister,
+        "collection_principal": canister_id,
+        "network": network,
+        "item_id": item_id,
+        "item_name": item_name,
+        "tag_uid": uid,
+        "nfc_route": f"/{route}",
+        "created_at_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(descriptor, "w", encoding="ascii") as handle:
-        handle.write(key_hex + "\n")
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        json.dump(key_record, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
     return path
 
 
@@ -339,7 +389,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--param", help="One signed custom NDEF parameter, e.g. item_id=0")
     parser.add_argument("--cmac-count", type=int, default=20_000)
     parser.add_argument("--batch-size", type=int, default=1_000)
-    parser.add_argument("--random-key", action="store_true")
+    parser.add_argument(
+        "--key-mode",
+        choices=KEY_MODES,
+        help="AES key mode: random (saved per Item) or zero (test only)",
+    )
+    parser.add_argument("--random-key", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--key-dir", type=Path)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--yes", action="store_true", help="Skip the y/N confirmation")
@@ -364,6 +419,7 @@ def main() -> int:
             raise EnrollmentError("cmac-count must be between 1 and 16,777,215")
         if args.batch_size <= 0:
             raise EnrollmentError("batch-size must be greater than zero")
+        key_mode = requested_key_mode(args.key_mode, args.random_key)
 
         expected_route = f"nfc/item/{args.item_id}"
         route = normalize_route(args.route or expected_route)
@@ -401,11 +457,31 @@ def main() -> int:
         print(f"Protected route  : /{route} ({'already present' if route_is_present else 'to create'})")
         print(f"NDEF URL         : {dynamic_url}")
         print(f"CMAC proofs      : {args.cmac_count}")
-        print(f"AES key          : {'random, saved before programming' if args.random_key else 'factory test key (all zeroes)'}")
+        if key_mode == KEY_MODE_RANDOM:
+            key_description = "random, saved with the Collection and Item"
+        elif key_mode == KEY_MODE_ZERO:
+            key_description = "all zeroes (test only)"
+        else:
+            key_description = "choose random or zero during programming"
+        print(f"AES key          : {key_description}")
 
         if not args.execute:
             print("\nPLAN ONLY — no reader, tag or canister state was changed.")
             return 0
+
+        if key_mode is None:
+            if args.yes:
+                raise EnrollmentError("--key-mode random or --key-mode zero is required with --yes")
+            key_mode = prompt_key_mode()
+
+        print(
+            "Selected AES key: "
+            + (
+                "random unique key (saved before programming)"
+                if key_mode == KEY_MODE_RANDOM
+                else "all-zero test key"
+            )
+        )
 
         if not args.yes:
             confirmation = input(
@@ -413,6 +489,7 @@ def main() -> int:
                 f"Place the NTAG 424 for Item {args.item_id} on the programmer.\n"
                 f"Collection to program: {args.canister} ({canister_id})\n"
                 f"NFC path: /{route}\n"
+                f"AES key mode: {key_mode}\n"
                 "Continue? [y/N]: "
             ).strip().lower()
             if confirmation != "y":
@@ -463,10 +540,23 @@ def main() -> int:
 
             key_hex = DEFAULT_KEY_HEX
             key_path: Path | None = None
-            if args.random_key:
+            if key_mode == KEY_MODE_RANDOM:
                 key_hex = secrets.token_hex(16).upper()
-                key_path = save_random_key(key_hex, args.canister, uid, args.key_dir)
-                print(f"AES key saved    : {key_path} (mode 0600; key not displayed)")
+                key_path = save_random_key(
+                    key_hex,
+                    args.canister,
+                    canister_id,
+                    args.network,
+                    args.item_id,
+                    str(item.get("name", "")),
+                    uid,
+                    route,
+                    args.key_dir,
+                )
+                print(
+                    f"AES key file     : {key_path} "
+                    "(mode 0600; contains key and Item mapping)"
+                )
 
             hashes = hashed_cmacs.generate_hashes(args.cmac_count, uid, key_hex)
 
@@ -489,10 +579,13 @@ def main() -> int:
                 ntp,
                 uri,
                 parameter,
-                key_hex if args.random_key else None,
+                key_hex if key_mode == KEY_MODE_RANDOM else None,
                 card_type.value,
             )
-            print("NTAG NDEF, SDM settings and AES key programmed.")
+            if key_mode == KEY_MODE_RANDOM:
+                print("NTAG NDEF, SDM settings and random AES key programmed.")
+            else:
+                print("NTAG NDEF and SDM settings programmed; all-zero AES key retained.")
         finally:
             ntp.ReaderClose()
 

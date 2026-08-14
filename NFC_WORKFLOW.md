@@ -47,9 +47,17 @@ make nfc-program \
   NFC_NETWORK=ic
 ```
 
-Le script demande de poser la puce, affiche la Collection et l'Item ciblés,
-puis demande simplement de saisir `y` avant toute mutation. Pour B0, les
-valeurs par défaut sont :
+Le script propose alors deux choix :
+
+```text
+1. random - clé aléatoire unique sauvegardée dans un fichier privé (recommandé)
+2. zero   - clé 00000000000000000000000000000000 (test uniquement)
+```
+
+Le choix peut aussi être indiqué directement dans la commande avec
+`NFC_KEY_MODE=random` ou `NFC_KEY_MODE=zero`. Le script demande ensuite de poser
+la puce, affiche la Collection et l'Item ciblés, puis demande simplement de
+saisir `y` avant toute mutation. Pour B0, les valeurs sont :
 
 ```text
 Collection : collection_bleu
@@ -59,12 +67,21 @@ Path NFC   : /nfc/item/0
 Paramètre  : item_id=0 (placé avant uid/ctr/cmac dans l'URL)
 ```
 
-Pour le premier test matériel, la clé d'usine est conservée afin que la puce
-reste récupérable si une étape échoue. Ce mode valide le fonctionnement, mais
-ne constitue pas encore une authentification de production : la clé d'usine
-est connue. `NFC_RANDOM_KEY=1` génère une clé privée et la sauvegarde dans
-`~/.local/share/evorev/nfc-keys/`, mais ne doit être utilisé qu'après validation
-du workflow de reprise.
+Le mode `zero` conserve la clé d'usine. Il valide le fonctionnement, mais ne
+constitue pas une authentification sécurisée puisque cette clé est connue.
+
+Le mode `random` génère une clé différente pour chaque puce et crée, avant la
+programmation, un fichier privé dans `~/.local/share/evorev/nfc-keys/`. Le
+fichier porte le nom de la Collection, l'Item et l'UID, par exemple :
+
+```text
+collection_bleu-item-0-04958CAA5E5E80.key
+```
+
+Son contenu JSON associe la clé à l'alias et au Principal de la Collection, au
+réseau, au numéro et au nom de l'Item, à l'UID et à la route NFC. Le fichier est
+créé avec les permissions `0600`; il contient un secret et ne doit jamais être
+partagé, ajouté à Git ou supprimé tant que la puce est utilisée.
 
 ## Paths des images et entrée NFC
 
