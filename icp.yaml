@@ -1,0 +1,12 @@
+canisters:
+  - name: collection_bleu
+    recipe:
+      type: "@dfinity/motoko@v5.0.0"
+
+  - name: collection_monayolla
+    recipe:
+      type: "@dfinity/motoko@v5.0.0"
+
+  - name: collection_heloise
+    recipe:
+      type: "@dfinity/motoko@v5.0.0"
