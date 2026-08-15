@@ -5,9 +5,12 @@
 -include .env
 
 REPLICA_URL := $(if $(filter ic,$(subst ',,$(DFX_NETWORK))),https://ic0.app,http://127.0.0.1:4943)
-CANISTER_NAME := $(shell test -f .env && grep "CANISTER_ID_" .env | grep -v "INTERNET_IDENTITY\|CANISTER_ID='" | head -1 | sed 's/CANISTER_ID_\([^=]*\)=.*/\1/' | tr '[:upper:]' '[:lower:]')
-CANISTER_ID := $(CANISTER_ID_$(shell echo $(CANISTER_NAME) | tr '[:lower:]' '[:upper:]'))
-IC_CANISTER_ID = $(shell dfx canister id $(CANISTER_NAME) --ic)
+COLLECTION ?= collection_bleu
+CANISTER_NAME ?= $(COLLECTION)
+ICP_ENVIRONMENT ?= local
+ICP_IDENTITY ?= raygen
+CANISTER_ID = $(shell jq -r --arg name "$(CANISTER_NAME)" '.[$$name] // empty' .icp/cache/mappings/local.ids.json 2>/dev/null)
+IC_CANISTER_ID = $(shell jq -r --arg name "$(CANISTER_NAME)" '.[$$name] // empty' .icp/data/mappings/ic.ids.json)
 CMAC_COUNT ?= 20000
 
 # NFC enrollment always targets one explicit Collection. These variables are
@@ -23,7 +26,7 @@ NFC_BATCH_SIZE ?= 1000
 NFC_KEY_MODE ?=
 NFC_RANDOM_KEY ?=
 NFC_PARAM ?= item_id=$(NFC_ITEM_ID)
-IC_IDENTITY ?= raygen
+IC_IDENTITY ?= $(ICP_IDENTITY)
 IC_COLLECTIONS := collection_monayolla collection_bleu collection_heloise
 # Keep an independent Principal allowlist for live NFC enrollment. This makes a
 # mistyped or accidentally remapped dfx alias fail before any tag/canister write.
@@ -48,11 +51,25 @@ else
     OPEN_CMD := start
 endif
 
-all:
-	dfx deploy $(CANISTER_NAME)
+all: check
+
+check:
+	mops install --lock check
+	mops test
+	python3 test/test_nfc_scripts.py -q
+	@for canister in $(IC_COLLECTIONS); do \
+		mops check $$canister || exit 1; \
+	done
+	icp build
+
+local:
+	icp network start -d
+	icp deploy $(CANISTER_NAME) --identity $(ICP_IDENTITY)
 
 ic:
-	dfx deploy $(CANISTER_NAME) --ic
+	mops check $(CANISTER_NAME)
+	icp deploy $(CANISTER_NAME) --environment ic --identity $(ICP_IDENTITY) --mode upgrade --no-create
+	mops deployed $(CANISTER_NAME)
 
 url:
 	$(OPEN_CMD) http://$(CANISTER_ID).raw.localhost:4943/
@@ -68,7 +85,7 @@ sync:
 Isync:
 	icx-asset --replica https://ic0.app --pem ~/.config/dfx/identity/raygen/identity.pem sync $(CANISTER_ID) ./public
 
-.PHONY: require-nfc-collection require-nfc-item item-add nfc-plan nfc-program protect protect_ic ic-health
+.PHONY: all check local ic stop-local require-nfc-collection require-nfc-item item-add nfc-plan nfc-program protect protect_ic ic-health reinstall
 
 require-nfc-collection:
 	@test -n "$(strip $(NFC_COLLECTION))" || { \
@@ -109,12 +126,16 @@ protect_ic: nfc-plan
 ic-health:
 	@for canister in $(IC_COLLECTIONS); do \
 		echo "== $$canister =="; \
-		dfx canister --network ic --identity $(IC_IDENTITY) status $$canister; \
-		dfx canister snapshot list --network ic --identity $(IC_IDENTITY) $$canister; \
+		icp canister status $$canister --environment ic --identity $(IC_IDENTITY); \
+		icp canister snapshot list $$canister --environment ic --identity $(IC_IDENTITY); \
 	done
 
 reinstall:
-	dfx deploy $(CANISTER_NAME) --mode reinstall
+	@echo "ERROR: reinstall is forbidden for stateful Collection canisters; use 'make ic COLLECTION=<alias>'." >&2
+	@exit 2
+
+stop-local:
+	./scripts/stop-local-network.sh 8000
 
 ls:
 	icx-asset --replica https://ic0.app --pem ~/.config/dfx/identity/raygen/identity.pem ls $(CANISTER_ID)

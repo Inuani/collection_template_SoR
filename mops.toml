@@ -10,16 +10,16 @@ sha2 = "0.1.6"
 main = "src/main.mo"
 
 [canisters.collection_bleu.check-stable]
-path = "deployed/collection.most"
+path = "deployed/collection_bleu.most"
 
 [canisters.collection_monayolla]
 main = "src/main.mo"
 
 [canisters.collection_monayolla.check-stable]
-path = "deployed/collection.most"
+path = "deployed/collection_monayolla.most"
 
 [canisters.collection_heloise]
 main = "src/main.mo"
 
 [canisters.collection_heloise.check-stable]
-path = "deployed/collection.most"
+path = "deployed/collection_heloise.most"

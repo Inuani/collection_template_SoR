@@ -183,8 +183,8 @@ type Branch__187687365<K, V> =
   (nats : [var Nat], parent : [var ?Branch__187687365<K, V>],
    keys : [var ?K], children : [var ?Node__1049340821<K, V>],
    max : [var ?(K, V)]);
-type Button__383327826 = {link : Text; text : Text};
-type CardConfig__925504148 = {domain : Text; file_name : Text; item_id : Nat};
+type Button__402596543 = {link : Text; text : Text};
+type CardConfig__560493945 = {domain : Text; file_name : Text; item_id : Nat};
 type CertifiedAssets__350796196 = StableStore__1038099049;
 type CertifiedAssets__947232077 = StableStore__1038099049;
 type ChunkId__1015970603 = Nat;
@@ -334,7 +334,7 @@ type EvidenceComputation__971481558 =
     #NextChunkIndex : NextChunkIndex__313511701;
     #NextOperation : NextOperation__207421851
   };
-type FileChunk__841151876 = [Nat8];
+type FileChunk__1070820453 = [Nat8];
 type FileSystem__1037799010 =
   {
     certs : CertifiedAssets__947232077;
@@ -347,11 +347,11 @@ type FileSystem__750261061 =
     region : MemoryRegion__735462361;
     root : Directory__617814113
   };
-type FinalizationRequest__716588689 =
+type FinalizationRequest__1055150708 =
   {
-    event : MeetingEvent__25719957;
-    prepared_peers : [PreparedPeer__928177138];
-    scans : [ScanProof__233979400]
+    event : MeetingEvent__379478482;
+    prepared_peers : [PreparedPeer__1022788668];
+    scans : [ScanProof__994635710]
   };
 type FreeMemoryV1__499254004 = MaxBpTree__206817037<Nat, Nat>;
 type Hash__118213947 = Blob;
@@ -373,7 +373,7 @@ type HierarchicalAssets__973512633 =
 type IntervalLength__163078499 = Nat;
 type Interval__878782851 =
   {len : IntervalLength__163078499; prefix : Prefix__1012404610};
-type Item__897033025 =
+type Item__520797991 =
   {
     attributes : [(Text, Text)];
     description : Text;
@@ -415,23 +415,23 @@ type MaxBpTree__516326031<K, V> =
     var root : Node__1049340821<K, V>;
     var size : Nat
   };
-type MeetingEvent__25719957 =
+type MeetingEvent__379478482 =
   {
     confirmed_at_ns : Int;
     first_scan_at_ns : Int;
     last_scan_at_ns : Int;
     location : Text;
     meeting_id : Text;
-    participants : [ObjectRef__323296666];
+    participants : [ObjectRef__470000712];
     reader_id : Text
   };
-type MeetingRecord__633584107 =
+type MeetingRecord__142900096 =
   {
-    event : MeetingEvent__25719957;
+    event : MeetingEvent__379478482;
     local_item_ids : [Nat];
-    status : MeetingStatus__764276322
+    status : MeetingStatus__387010936
   };
-type MeetingStatus__764276322 = {#confirmed; #pending};
+type MeetingStatus__387010936 = {#confirmed; #pending};
 type MemoryRegionV1__288728257 =
   {
     var deallocated : Nat;
@@ -495,8 +495,8 @@ type NextOperation__881238474 =
 type Node__1049340821<K, V> =
   {#branch : Branch__187687365<K, V>; #leaf : Leaf__573191812<K, V>};
 type OT__959610089 = ?T__371227266;
-type ObjectRef__323296666 = {collection : Principal; item_id : Nat};
-type PackageGrant__703732364 =
+type ObjectRef__470000712 = {collection : Principal; item_id : Nat};
+type PackageGrant__152787671 =
   {
     claim_id : Text;
     domain : Text;
@@ -506,7 +506,7 @@ type PackageGrant__703732364 =
     item_id : Nat;
     token : Text
   };
-type PendingClaim__564664850 =
+type PendingClaim__741285665 =
   {
     claim_id : Text;
     domain : Text;
@@ -516,14 +516,14 @@ type PendingClaim__564664850 =
     item_id : Nat;
     token : Text
   };
-type PendingMeeting__140966089 =
+type PendingMeeting__580355049 =
   {
-    event : MeetingEvent__25719957;
+    event : MeetingEvent__379478482;
     expected_finalizer : Principal;
     handoff_hash : Text;
     local_item_ids : [Nat];
     receipt_id : Text;
-    scans : [ScanProof__233979400]
+    scans : [ScanProof__994635710]
   };
 type Permissions__474281678 =
   {
@@ -539,11 +539,11 @@ type Permissions__861783924 =
   };
 type Prefix__1012404610 = [Nat8];
 type Prefix__102346302 = [Nat8];
-type PreparedPeer__928177138 =
+type PreparedPeer__1022788668 =
   {collection : Principal; handoff_token : Text; receipt_id : Text};
-type ProtectedRoute__119134017 =
-  {path : Text; tags : [(Text, TagData__627556075)]};
-type ScanProof__233979400 =
+type ProtectedRoute__886597268 =
+  {path : Text; tags : [(Text, TagData__701860972)]};
+type ScanProof__994635710 =
   {
     counter : Nat;
     item_id : Nat;
@@ -730,11 +730,11 @@ type StoredChunk__321276854 =
 type StoredChunk__74522056 =
   {batch_id : BatchId__1038169779; pointer : SizedPointer__460139987};
 type StoredChunk__894833069 = {batch_id : BatchId__580583955; content : Blob};
-type StoredFile__907455099 =
+type StoredFile__186697913 =
   {
     artist : Text;
     contentType : Text;
-    data : [FileChunk__841151876];
+    data : [FileChunk__1070820453];
     title : Text;
     totalChunks : Nat
   };
@@ -805,7 +805,7 @@ type T__371227266 =
         tree_hash : Hash__118213947
       }
   };
-type TagData__627556075 = {cmacs_ : [Text]; scan_count_ : Nat};
+type TagData__701860972 = {cmacs_ : [Text]; scan_count_ : Nat};
 type Time__171707794 = Time__38388344;
 type Time__293467431 = Time__38388344;
 type Time__38388344 = Int;
@@ -841,11 +841,11 @@ type Upload__63236540 =
     var next_chunk_id : ChunkId__526432353;
     region : MemoryRegion__547383546
   };
-type ValidatedScan__845374456 =
+type ValidatedScan__801614214 =
   {
     meeting_id : Text;
-    object_ref : ObjectRef__323296666;
-    scan : ScanProof__233979400
+    object_ref : ObjectRef__470000712;
+    scan : ScanProof__994635710
   };
 type Value__103857721 = Blob;
 type Vector__829235413<A> = Vector__985631301<A>;
@@ -861,34 +861,34 @@ actor {
       #v0_3_0 : StableStore__156939200;
       #v1_0_0 : StableStore__16837248
     };
-  stable buttonsState : {var buttons : [Button__383327826]};
+  stable buttonsState : {var buttons : [Button__402596543]};
   stable collectionState :
     {
       var collectionDescription : Text;
       var collectionName : Text;
-      var items : [(Nat, Item__897033025)];
+      var items : [(Nat, Item__520797991)];
       var nextId : Nat
     };
   stable fileAccessState : {var secret : Blob};
   stable fileStorageState :
-    {var storedFiles : [(Text, StoredFile__907455099)]};
+    {var storedFiles : [(Text, StoredFile__186697913)]};
   stable knitworkState :
     {
-      var finalization_requests : [(Text, FinalizationRequest__716588689)];
+      var finalization_requests : [(Text, FinalizationRequest__1055150708)];
       var item_meeting_ids : [(Nat, [Text])];
-      var meetings : [(Text, MeetingRecord__633584107)];
-      var pending_meetings : [(Text, PendingMeeting__140966089)];
+      var meetings : [(Text, MeetingRecord__142900096)];
+      var pending_meetings : [(Text, PendingMeeting__580355049)];
       var trusted_hub : ?Principal;
-      var validated_scans : [(Text, ValidatedScan__845374456)]
+      var validated_scans : [(Text, ValidatedScan__801614214)]
     };
   stable protectedRoutesState :
-    {var protected_routes : [(Text, ProtectedRoute__119134017)]};
+    {var protected_routes : [(Text, ProtectedRoute__886597268)]};
   stable sneakerwebClaimsState :
     {
-      var cards : [(Nat, CardConfig__925504148)];
+      var cards : [(Nat, CardConfig__560493945)];
       var nonce : Nat;
-      var package_grants : [(Text, PackageGrant__703732364)];
-      var pending_claims : [(Text, PendingClaim__564664850)];
+      var package_grants : [(Text, PackageGrant__152787671)];
+      var pending_claims : [(Text, PendingClaim__741285665)];
       var private_file_names : [Text];
       var pwa_import_url : Text
     };
