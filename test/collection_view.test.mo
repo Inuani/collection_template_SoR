@@ -27,6 +27,8 @@ assert (Text.contains(EvorevFonts.css, #text "Sketchbook Notes"));
 assert (Text.contains(EvorevTheme.css, #text "Providence Sans"));
 assert (Text.contains(EvorevTheme.css, #text "Sketchbook Notes"));
 assert (Text.contains(collectionPage, #text "font-family:var(--font-display)"));
+assert (Text.contains(collectionPage, #text "object-fit:contain"));
+assert (not Text.contains(collectionPage, #text "object-fit:cover"));
 assert (Text.contains(collectionPage, #text "#1116a3"));
 assert (Text.contains(collectionPage, #text "#ffd6f7"));
 assert (Text.contains(collectionPage, #text "#b3ffc1"));
