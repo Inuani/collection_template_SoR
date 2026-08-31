@@ -1,39 +1,44 @@
 #!/usr/bin/env bash
 
-set -u
+set -euo pipefail
 
 # Script to add items to the collection
-# Usage: ./add_item.sh <canister_alias> <network> [identity]
+# Usage: ./add_item.sh <canister_alias> <environment> [identity]
 
 CANISTER_NAME=${1:-}
-NETWORK=${2:-local}
+ENVIRONMENT=${2:-local}
 IDENTITY=${3:-raygen}
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 # Check if canister name is provided
 if [ -z "$CANISTER_NAME" ]; then
     echo "Error: Canister name is required"
-    echo "Usage: $0 <canister_alias> <network> [identity]"
+    echo "Usage: $0 <canister_alias> <environment> [identity]"
     exit 1
 fi
 
-case "$NETWORK" in
+case "$ENVIRONMENT" in
     ic|local) ;;
     *)
-        echo "Error: network must be 'ic' or 'local'"
+        echo "Error: environment must be 'ic' or 'local'"
         exit 1
         ;;
 esac
 
-if ! CANISTER_ID=$(dfx canister id --network "$NETWORK" --identity "$IDENTITY" "$CANISTER_NAME" 2>/dev/null); then
-    echo "Error: cannot resolve '$CANISTER_NAME' on network '$NETWORK'"
+if ! command -v icp >/dev/null 2>&1; then
+    echo "Error: icp is not available"
+    exit 1
+fi
+
+if ! CANISTER_ID=$(icp canister status "$CANISTER_NAME" --environment "$ENVIRONMENT" --identity "$IDENTITY" --id-only 2>/dev/null); then
+    echo "Error: cannot resolve '$CANISTER_NAME' in environment '$ENVIRONMENT'"
     exit 1
 fi
 
 echo "Adding item to collection..."
 echo "Canister: $CANISTER_NAME"
 echo "Principal: $CANISTER_ID"
-echo "Network: $NETWORK"
+echo "Environment: $ENVIRONMENT"
 echo "Identity: $IDENTITY"
 echo ""
 
@@ -76,8 +81,8 @@ ARGUMENT=$(python3 "$SCRIPT_DIR/candid_values.py" item-argument \
 
 # JSON output makes the returned Nat unambiguous. Text fields are rendered by
 # candid_values.py so quotes, backslashes and newlines cannot alter the call.
-if RESULT=$(dfx canister --network "$NETWORK" --identity "$IDENTITY" call \
-    "$CANISTER_NAME" addCollectionItem "$ARGUMENT" --output json); then
+if RESULT=$(icp canister call "$CANISTER_NAME" addCollectionItem "$ARGUMENT" \
+    --environment "$ENVIRONMENT" --identity "$IDENTITY" --output candid); then
     echo "✓ Item added successfully!"
     echo "Result: $RESULT"
 
@@ -91,7 +96,7 @@ if RESULT=$(dfx canister --network "$NETWORK" --identity "$IDENTITY" call \
     echo "NFC path: /nfc/item/$ID"
     echo ""
     echo "Next safe step (plan only):"
-    echo "make nfc-plan NFC_COLLECTION=$CANISTER_NAME NFC_ITEM_ID=$ID NFC_NETWORK=$NETWORK"
+    echo "make nfc-plan NFC_COLLECTION=$CANISTER_NAME NFC_ITEM_ID=$ID NFC_ENVIRONMENT=$ENVIRONMENT"
 else
     echo "✗ Failed to add item"
     exit 1

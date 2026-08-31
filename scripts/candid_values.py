@@ -4,12 +4,10 @@
 from __future__ import annotations
 
 import json
-import re
 import sys
 from collections.abc import Sequence
 
-
-NAT_RE = re.compile(r"^(0|[1-9][0-9]*)$")
+import icp_cli
 
 
 def candid_text(value: str) -> str:
@@ -27,19 +25,8 @@ def build_item_argument(fields: Sequence[str], attributes: Sequence[tuple[str, s
     return f"({rendered_fields}, vec {{{rendered_attributes}}})"
 
 
-def parse_nat_json(output: str) -> int:
-    try:
-        value = json.loads(output)
-    except json.JSONDecodeError as exc:
-        raise ValueError("dfx did not return valid JSON") from exc
-
-    if isinstance(value, bool):
-        raise ValueError("dfx returned a Boolean instead of a Nat")
-    if isinstance(value, int) and value >= 0:
-        return value
-    if isinstance(value, str) and NAT_RE.fullmatch(value):
-        return int(value)
-    raise ValueError("dfx JSON result is not one Candid Nat")
+def parse_nat_candid(output: str) -> int:
+    return icp_cli.parse_nat(output)
 
 
 def main(arguments: Sequence[str] | None = None) -> int:
@@ -59,7 +46,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         return 0
 
     if command == "parse-nat" and len(values) == 1:
-        print(parse_nat_json(values[0]))
+        print(parse_nat_candid(values[0]))
         return 0
     raise ValueError("invalid candid_values.py arguments")
 

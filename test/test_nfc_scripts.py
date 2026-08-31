@@ -17,6 +17,7 @@ sys.path.insert(0, str(SCRIPTS))
 import hashed_cmacs
 import batch_cmacs
 import candid_values
+import icp_cli
 import setup_route
 
 
@@ -32,12 +33,24 @@ class NfcScriptTests(unittest.TestCase):
             '"ligne 1\\nligne 2", "Unique", vec {record {"taille \\"EU\\""; "M\\\\\\\\L"}})',
         )
 
-    def test_nat_result_is_parsed_as_json_not_first_number(self):
-        self.assertEqual(candid_values.parse_nat_json('"42"'), 42)
-        self.assertEqual(candid_values.parse_nat_json("42"), 42)
-        for invalid in ('"Item 42"', '{"id":"42"}', "true", "-1"):
+    def test_nat_result_is_parsed_as_candid_not_first_number(self):
+        self.assertEqual(candid_values.parse_nat_candid("(42 : nat)"), 42)
+        self.assertEqual(candid_values.parse_nat_candid("(42)"), 42)
+        for invalid in ('"42"', '("Item 42")', '(true)', '(-1 : int)'):
             with self.assertRaises(ValueError):
-                candid_values.parse_nat_json(invalid)
+                candid_values.parse_nat_candid(invalid)
+
+    def test_icp_candid_helpers_parse_operator_responses(self):
+        item = '(opt record { name = "Item \\42"; id = 7 : nat; chunk = blob "A\\00\\ff"; })'
+        self.assertTrue(icp_cli.optional_is_present(item))
+        self.assertFalse(icp_cli.optional_is_present("(null)"))
+        self.assertEqual(icp_cli.text_field(item, "name"), "Item B")
+        self.assertEqual(icp_cli.nat_field(item, "id"), 7)
+        self.assertEqual(icp_cli.blob_field(item, "chunk"), b"A\x00\xff")
+        self.assertEqual(
+            icp_cli.parse_text_vector('(vec { "aa"; "b\\62"; })'),
+            ["aa", "bb"],
+        )
 
     def test_make_refuses_implicit_collection_and_item(self):
         result = subprocess.run(
@@ -55,7 +68,7 @@ class NfcScriptTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("NFC_COLLECTION is required", result.stdout + result.stderr)
 
-    def test_make_nfc_guards_do_not_require_env_or_invoke_dfx(self):
+    def test_make_nfc_guards_do_not_require_env_or_invoke_icp(self):
         environment = os.environ.copy()
         environment["PATH"] = "/usr/bin:/bin"
         result = subprocess.run(
@@ -75,7 +88,7 @@ class NfcScriptTests(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("NFC_COLLECTION is required", result.stdout + result.stderr)
-        self.assertNotIn("dfx:", result.stdout + result.stderr)
+        self.assertNotIn("icp:", result.stdout + result.stderr)
         self.assertNotIn(".env:", result.stdout + result.stderr)
 
     def test_live_principal_pin_is_not_applied_to_local_plan(self):
@@ -93,7 +106,7 @@ class NfcScriptTests(unittest.TestCase):
             capture_output=True,
             check=True,
         ).stdout
-        self.assertIn("--network local", local)
+        self.assertIn("--environment local", local)
         self.assertNotIn("--expected-canister-id", local)
 
         live = subprocess.run(
@@ -104,7 +117,7 @@ class NfcScriptTests(unittest.TestCase):
                 "nfc-plan",
                 "NFC_COLLECTION=collection_bleu",
                 "NFC_ITEM_ID=0",
-                "NFC_NETWORK=ic",
+                "NFC_ENVIRONMENT=ic",
             ],
             cwd=PROJECT_ROOT,
             text=True,
@@ -189,6 +202,8 @@ class NfcScriptTests(unittest.TestCase):
             self.assertEqual(record["item_name"], "Item Bleu 7")
             self.assertEqual(record["tag_uid"], "04958CAA5E5E80")
             self.assertEqual(record["nfc_route"], "/nfc/item/7")
+            self.assertEqual(record["schema_version"], 2)
+            self.assertEqual(record["environment"], "ic")
 
             with self.assertRaisesRegex(setup_route.EnrollmentError, "already exists"):
                 setup_route.save_random_key(
@@ -249,13 +264,15 @@ class NfcScriptTests(unittest.TestCase):
             "collection_bleu": "ubnuj-uyaaa-aaaak-qudbq-cai",
             "collection_heloise": "jmp6g-oqaaa-aaaak-qug3q-cai",
         }
-        dfx = json.loads((PROJECT_ROOT / "dfx.json").read_text())
-        canister_ids = json.loads((PROJECT_ROOT / "canister_ids.json").read_text())
+        declared = icp_cli.declared_canisters(PROJECT_ROOT)
+        canister_ids = json.loads(
+            (PROJECT_ROOT / ".icp/data/mappings/ic.ids.json").read_text()
+        )
         makefile = (PROJECT_ROOT / "Makefile").read_text()
 
         for alias, principal in expected.items():
-            self.assertEqual(dfx["canisters"][alias]["main"], "src/main.mo")
-            self.assertEqual(canister_ids[alias]["ic"], principal)
+            self.assertIn(alias, declared)
+            self.assertEqual(canister_ids[alias], principal)
             self.assertIn(
                 f"NFC_EXPECTED_CANISTER_ID_{alias} := {principal}",
                 makefile,

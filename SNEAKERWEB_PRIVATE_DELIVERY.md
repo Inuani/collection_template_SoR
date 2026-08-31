@@ -45,15 +45,14 @@ Un `.snk` configuré reste refusé sur les routes GET historiques
 
 ## Upgrade d'une Collection
 
-Toujours créer un snapshot avant l'upgrade IC, puis conserver la mémoire Wasm :
+Toujours créer un snapshot avant l'upgrade IC :
 
 ```bash
-dfx canister stop collection_bleu --ic
-dfx canister snapshot create collection_bleu --ic
-dfx canister start collection_bleu --ic
-dfx deploy collection_bleu --ic \
-  --mode upgrade \
-  --wasm-memory-persistence keep
+icp canister stop collection_bleu --environment ic --identity raygen
+icp canister snapshot create collection_bleu --environment ic --identity raygen
+icp canister start collection_bleu --environment ic --identity raygen
+icp deploy collection_bleu --environment ic --identity raygen \
+  --mode upgrade --no-create
 ```
 
 Le premier upgrade vers cette version ajoute un secret aléatoire de 32 octets
@@ -61,9 +60,9 @@ pour les anciens liens temporaires de fichiers. Il est créé dans le canister e
 n'est jamais affiché :
 
 ```bash
-dfx canister call collection_bleu get_file_access_status --ic
-dfx canister call collection_bleu rotate_file_access_secret --ic
-dfx canister call collection_bleu get_file_access_status --ic
+icp canister call collection_bleu get_file_access_status '()' --environment ic --identity raygen --query
+icp canister call collection_bleu rotate_file_access_secret '()' --environment ic --identity raygen
+icp canister call collection_bleu get_file_access_status '()' --environment ic --identity raygen --query
 ```
 
 L'appel de rotation est réservé à l'identité qui a initialisé la Collection.
@@ -76,7 +75,7 @@ flux privé Sneakerweb continue, lui, à utiliser ses propres capabilities.
 ```bash
 mops test
 python3 test/test_nfc_scripts.py -q
-dfx build --ic collection_bleu
+icp build collection_bleu
 ```
 
 Après un upgrade, vérifier au minimum le nom, les Items, les routes NFC, les

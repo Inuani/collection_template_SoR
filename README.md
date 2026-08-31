@@ -62,6 +62,6 @@ publier une clé AES NFC, un UID, une table CMAC, un token de claim ou une
 capability de paquet. Un `reinstall` efface l'état du canister ; il ne doit
 jamais servir à une mise à jour normale.
 
-Les builds et déploiements utilisent ICP CLI. `dfx.json` et `canister_ids.json`
-restent temporairement présents uniquement pour les scripts NFC historiques ;
-ils ne sont plus la source des IDs de déploiement.
+Les builds, déploiements et scripts opérateur utilisent ICP CLI. Les IDs IC
+permanents sont versionnés dans `.icp/data/mappings/ic.ids.json` ; l'ancien
+format de configuration n'est plus utilisé.

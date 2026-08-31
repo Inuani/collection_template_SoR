@@ -12,7 +12,6 @@ import os
 import re
 import secrets
 import shutil
-import subprocess
 import sys
 from ctypes import c_ubyte, c_uint, c_uint16, memset, sizeof
 from datetime import datetime, timezone
@@ -20,6 +19,7 @@ from pathlib import Path
 
 import batch_cmacs
 import hashed_cmacs
+import icp_cli
 
 
 CANISTER_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
@@ -33,14 +33,6 @@ KEY_MODES = (KEY_MODE_RANDOM, KEY_MODE_ZERO)
 
 class EnrollmentError(RuntimeError):
     pass
-
-
-def run(command: list[str], project_root: Path) -> str:
-    result = subprocess.run(command, cwd=project_root, text=True, capture_output=True)
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise EnrollmentError(f"command failed ({' '.join(command[:5])}): {detail}")
-    return result.stdout.strip()
 
 
 def normalize_route(value: str) -> str:
@@ -77,121 +69,97 @@ def validate_knitwork_binding(
         )
 
 
-def read_dfx_canisters(project_root: Path) -> dict[str, object]:
+def read_icp_canisters(project_root: Path) -> set[str]:
     try:
-        config = json.loads((project_root / "dfx.json").read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise EnrollmentError(f"cannot read dfx.json: {exc}") from exc
-    canisters = config.get("canisters")
-    if not isinstance(canisters, dict):
-        raise EnrollmentError("dfx.json has no canisters object")
-    return canisters
+        return icp_cli.declared_canisters(project_root)
+    except icp_cli.IcpCliError as exc:
+        raise EnrollmentError(str(exc)) from exc
 
 
-def resolve_canister_id(project_root: Path, canister: str, network: str, identity: str) -> str:
-    return run(
-        ["dfx", "canister", "id", "--network", network, "--identity", identity, canister],
-        project_root,
-    ).strip()
+def resolve_canister_id(
+    project_root: Path, canister: str, environment: str, identity: str
+) -> str:
+    try:
+        return icp_cli.resolve_canister_id(
+            project_root, canister, environment, identity
+        )
+    except icp_cli.IcpCliError as exc:
+        raise EnrollmentError(str(exc)) from exc
 
 
 def query_item(
     project_root: Path,
     canister: str,
-    network: str,
+    environment: str,
     identity: str,
     item_id: int,
 ) -> dict[str, object]:
-    output = run(
-        [
-            "dfx",
-            "canister",
-            "call",
-            "--network",
-            network,
-            "--identity",
+    try:
+        output = icp_cli.call_canister(
+            project_root,
+            environment,
             identity,
             canister,
             "getCollectionItem",
             f"({item_id} : nat)",
-            "--query",
-            "--output",
-            "json",
-        ],
-        project_root,
-    )
-    try:
-        value = json.loads(output)
-    except json.JSONDecodeError as exc:
-        raise EnrollmentError(f"unexpected getCollectionItem response: {output}") from exc
-    if not isinstance(value, list) or len(value) != 1 or not isinstance(value[0], dict):
-        raise EnrollmentError(f"item {item_id} does not exist in {canister}")
-    return value[0]
+            query=True,
+        )
+        if not icp_cli.optional_is_present(output):
+            raise EnrollmentError(f"item {item_id} does not exist in {canister}")
+        return {"name": icp_cli.text_field(output, "name")}
+    except (ValueError, icp_cli.IcpCliError) as exc:
+        raise EnrollmentError(f"unexpected getCollectionItem response: {exc}") from exc
 
 
 def route_exists(
     project_root: Path,
     canister: str,
-    network: str,
+    environment: str,
     identity: str,
     route: str,
 ) -> bool:
-    output = run(
-        [
-            "dfx",
-            "canister",
-            "call",
-            "--network",
-            network,
-            "--identity",
+    try:
+        output = icp_cli.call_canister(
+            project_root,
+            environment,
             identity,
             canister,
             "get_route_protection",
             f"({json.dumps(route)})",
-            "--query",
-            "--output",
-            "json",
-        ],
-        project_root,
-    )
-    try:
-        value = json.loads(output)
-    except json.JSONDecodeError as exc:
-        raise EnrollmentError(f"unexpected get_route_protection response: {output}") from exc
-    return isinstance(value, list) and len(value) == 1
+            query=True,
+        )
+        return icp_cli.optional_is_present(output)
+    except (ValueError, icp_cli.IcpCliError) as exc:
+        raise EnrollmentError(f"unexpected get_route_protection response: {exc}") from exc
 
 
 def ensure_route(
     project_root: Path,
     canister: str,
-    network: str,
+    environment: str,
     identity: str,
     route: str,
 ) -> None:
-    if not route_exists(project_root, canister, network, identity, route):
-        run(
-            [
-                "dfx",
-                "canister",
-                "call",
-                "--network",
-                network,
-                "--identity",
+    if not route_exists(project_root, canister, environment, identity, route):
+        try:
+            icp_cli.call_canister(
+                project_root,
+                environment,
                 identity,
                 canister,
                 "add_protected_route",
                 f"({json.dumps(route)})",
-            ],
-            project_root,
-        )
-    if not route_exists(project_root, canister, network, identity, route):
+            )
+        except icp_cli.IcpCliError as exc:
+            raise EnrollmentError(str(exc)) from exc
+    if not route_exists(project_root, canister, environment, identity, route):
         raise EnrollmentError("protected route was not persisted by the Collection")
 
 
-def base_url(canister_id: str, network: str, route: str) -> str:
-    if network == "ic":
+def base_url(canister_id: str, environment: str, route: str) -> str:
+    if environment == "ic":
         return f"https://{canister_id}.raw.icp0.io/{route}"
-    return f"http://{canister_id}.raw.localhost:4943/{route}"
+    return f"http://{canister_id}.raw.localhost:8000/{route}"
 
 
 def requested_key_mode(key_mode: str | None, legacy_random_key: bool) -> str | None:
@@ -220,7 +188,7 @@ def save_random_key(
     key_hex: str,
     canister: str,
     canister_id: str,
-    network: str,
+    environment: str,
     item_id: int,
     item_name: str,
     uid: str,
@@ -237,12 +205,12 @@ def save_random_key(
     if path.exists():
         raise EnrollmentError(f"key file already exists; refusing to overwrite it: {path}")
     key_record = {
-        "schema_version": 1,
+        "schema_version": 2,
         "key_mode": KEY_MODE_RANDOM,
         "aes_key_0_hex": key_hex,
         "collection_alias": canister,
         "collection_principal": canister_id,
-        "network": network,
+        "environment": environment,
         "item_id": item_id,
         "item_name": item_name,
         "tag_uid": uid,
@@ -383,7 +351,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--canister", required=True, help="Explicit alias, e.g. collection_bleu")
     parser.add_argument("--item-id", required=True, type=int)
     parser.add_argument("--route", help="NFC route; defaults to nfc/item/<item-id>")
-    parser.add_argument("--network", default="local")
+    parser.add_argument("--environment", choices=("local", "ic"), default="local")
     parser.add_argument("--identity", default="raygen")
     parser.add_argument("--expected-canister-id")
     parser.add_argument("--param", help="One signed custom NDEF parameter, e.g. item_id=0")
@@ -407,12 +375,12 @@ def main() -> int:
     project_root = Path(__file__).resolve().parents[1]
 
     try:
-        if shutil.which("dfx") is None:
-            raise EnrollmentError("dfx is not available")
+        if shutil.which("icp") is None:
+            raise EnrollmentError("icp is not available")
         if not CANISTER_RE.fullmatch(args.canister):
             raise EnrollmentError("invalid canister alias")
-        if args.canister not in read_dfx_canisters(project_root):
-            raise EnrollmentError(f"{args.canister} is not declared in dfx.json")
+        if args.canister not in read_icp_canisters(project_root):
+            raise EnrollmentError(f"{args.canister} is not declared in icp.yaml")
         if args.item_id < 0:
             raise EnrollmentError("item-id cannot be negative")
         if args.cmac_count <= 0 or args.cmac_count > 0xFFFFFF:
@@ -427,19 +395,19 @@ def main() -> int:
         parameter = parse_parameter(args.param) if args.param else expected_parameter
         validate_knitwork_binding(args.item_id, route, parameter)
         canister_id = resolve_canister_id(
-            project_root, args.canister, args.network, args.identity
+            project_root, args.canister, args.environment, args.identity
         )
         if args.expected_canister_id and canister_id != args.expected_canister_id:
             raise EnrollmentError(
                 f"principal mismatch: expected {args.expected_canister_id}, resolved {canister_id}"
             )
         item = query_item(
-            project_root, args.canister, args.network, args.identity, args.item_id
+            project_root, args.canister, args.environment, args.identity, args.item_id
         )
         route_is_present = route_exists(
-            project_root, args.canister, args.network, args.identity, route
+            project_root, args.canister, args.environment, args.identity, route
         )
-        uri = base_url(canister_id, args.network, route)
+        uri = base_url(canister_id, args.environment, route)
         dynamic_url = (
             uri
             + "?"
@@ -451,7 +419,7 @@ def main() -> int:
         print("===================")
         print(f"Collection alias : {args.canister}")
         print(f"Principal        : {canister_id}")
-        print(f"Network          : {args.network}")
+        print(f"Environment      : {args.environment}")
         print(f"Identity         : {args.identity}")
         print(f"Item             : {args.item_id} · {item.get('name', '')}")
         print(f"Protected route  : /{route} ({'already present' if route_is_present else 'to create'})")
@@ -546,7 +514,7 @@ def main() -> int:
                     key_hex,
                     args.canister,
                     canister_id,
-                    args.network,
+                    args.environment,
                     args.item_id,
                     str(item.get("name", "")),
                     uid,
@@ -562,11 +530,11 @@ def main() -> int:
 
             # Prepare and verify all on-chain validation data before touching the tag.
             ensure_route(
-                project_root, args.canister, args.network, args.identity, route
+                project_root, args.canister, args.environment, args.identity, route
             )
             batch_cmacs.upload_hashes(
                 project_root,
-                args.network,
+                args.environment,
                 args.identity,
                 args.canister,
                 route,
@@ -590,13 +558,16 @@ def main() -> int:
             ntp.ReaderClose()
 
         verified = batch_cmacs.query_existing_hashes(
-            project_root, args.network, args.identity, args.canister, route, uid
+            project_root, args.environment, args.identity, args.canister, route, uid
         )
         if verified != hashes:
             raise EnrollmentError("final on-chain CMAC verification failed")
 
         print("\nEnrollment complete and on-chain CMAC table verified.")
-        print(f"Public item page : {base_url(canister_id, args.network, f'item/{args.item_id}')}")
+        print(
+            "Public item page : "
+            + base_url(canister_id, args.environment, f"item/{args.item_id}")
+        )
         return 0
     except (EnrollmentError, RuntimeError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

@@ -789,7 +789,7 @@ if __name__ == '__main__':
         exit(1)
     
     print("> 2. Form SDM NDEF Payload...")
-    uri = "http://by6od-j4aaa-aaaaa-qaadq-cai.localhost:4943/page1.html"
+    uri = "http://by6od-j4aaa-aaaaa-qaadq-cai.localhost:8000/page1.html"
     formed_result = form_sdm_ndef_payload(uri)
     sdm_payload = formed_result["sdm_payload"]
     sdm_payload_length = formed_result["sdm_payload_length"]

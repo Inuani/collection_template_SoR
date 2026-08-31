@@ -6,10 +6,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Sequence
+
+import icp_cli
 
 
 HASH_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -34,9 +35,9 @@ def candid_hashes(values: Sequence[str]) -> str:
     return "vec {" + ";".join(candid_text(value) for value in values) + "}"
 
 
-def run_dfx(
+def run_icp(
     project_root: Path,
-    network: str,
+    environment: str,
     identity: str,
     canister: str,
     method: str,
@@ -44,27 +45,16 @@ def run_dfx(
     *,
     query: bool = False,
 ) -> str:
-    command = [
-        "dfx",
-        "canister",
-        "call",
-        "--network",
-        network,
-        "--identity",
+    return icp_cli.call_canister(
+        project_root,
+        environment,
         identity,
         canister,
         method,
         argument,
-        "--output",
-        "json",
-    ]
-    if query:
-        command.insert(-2, "--query")
-    result = subprocess.run(command, cwd=project_root, text=True, capture_output=True)
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise RuntimeError(f"dfx {method} failed: {detail}")
-    return result.stdout.strip()
+        query=query,
+        timeout=120,
+    )
 
 
 def read_hashes(path: Path) -> list[str]:
@@ -82,15 +72,15 @@ def read_hashes(path: Path) -> list[str]:
 
 def query_existing_hashes(
     project_root: Path,
-    network: str,
+    environment: str,
     identity: str,
     canister: str,
     route: str,
     uid: str,
 ) -> list[str]:
-    output = run_dfx(
+    output = run_icp(
         project_root,
-        network,
+        environment,
         identity,
         canister,
         "get_route_cmacs",
@@ -98,17 +88,17 @@ def query_existing_hashes(
         query=True,
     )
     try:
-        value = json.loads(output)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"unexpected get_route_cmacs response: {output}") from exc
-    if not isinstance(value, list) or any(not isinstance(entry, str) for entry in value):
-        raise RuntimeError("unexpected get_route_cmacs response type")
+        value = icp_cli.parse_text_vector(output)
+    except ValueError as exc:
+        raise RuntimeError("unexpected get_route_cmacs response type") from exc
+    if any(not HASH_RE.fullmatch(entry) for entry in value):
+        raise RuntimeError("get_route_cmacs returned an invalid hash")
     return value
 
 
 def upload_hashes(
     project_root: Path,
-    network: str,
+    environment: str,
     identity: str,
     canister: str,
     route: str,
@@ -116,7 +106,9 @@ def upload_hashes(
     desired: list[str],
     batch_size: int,
 ) -> None:
-    existing = query_existing_hashes(project_root, network, identity, canister, route, uid)
+    existing = query_existing_hashes(
+        project_root, environment, identity, canister, route, uid
+    )
     if existing == desired:
         print(f"CMAC table already complete ({len(desired)} hashes).")
         return
@@ -132,11 +124,13 @@ def upload_hashes(
         argument = (
             f"({candid_text(route)}, {candid_text(uid)}, {candid_hashes(batch)})"
         )
-        run_dfx(project_root, network, identity, canister, method, argument)
+        run_icp(project_root, environment, identity, canister, method, argument)
         offset += len(batch)
         print(f"Uploaded {offset}/{len(desired)} CMAC hashes.")
 
-    verified = query_existing_hashes(project_root, network, identity, canister, route, uid)
+    verified = query_existing_hashes(
+        project_root, environment, identity, canister, route, uid
+    )
     if verified != desired:
         raise RuntimeError("CMAC table verification failed after upload")
 
@@ -144,10 +138,10 @@ def upload_hashes(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Upload CMAC hashes to one Collection")
     parser.add_argument("cmacs_file", type=Path)
-    parser.add_argument("--canister", required=True, help="Explicit dfx canister alias")
+    parser.add_argument("--canister", required=True, help="Explicit ICP CLI canister alias")
     parser.add_argument("--route", required=True, help="Normalized route without query parameters")
     parser.add_argument("--uid", required=True, help="14-character NTAG UID")
-    parser.add_argument("--network", default="local")
+    parser.add_argument("--environment", choices=("local", "ic"), default="local")
     parser.add_argument("--identity", default="raygen")
     parser.add_argument("--batch-size", type=int, default=1_000)
     parser.add_argument("--execute", action="store_true")
@@ -175,7 +169,7 @@ def main() -> int:
         parser.error(str(exc))
 
     print(f"Collection : {args.canister}")
-    print(f"Network    : {args.network}")
+    print(f"Environment: {args.environment}")
     print(f"Identity   : {args.identity}")
     print(f"Route      : /{route}")
     print(f"Tag UID    : {uid}")
@@ -188,7 +182,7 @@ def main() -> int:
     try:
         upload_hashes(
             project_root,
-            args.network,
+            args.environment,
             args.identity,
             args.canister,
             route,

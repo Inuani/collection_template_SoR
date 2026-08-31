@@ -12,7 +12,7 @@ Le programmateur USB et la station Proof-of-Meet ont deux rôles différents :
 
 Les trois alias IC actuellement déclarés utilisent exactement le même code :
 
-| Alias dfx | Principal IC |
+| Alias ICP CLI | Principal IC |
 | --- | --- |
 | `collection_monayolla` | `4623w-oqaaa-aaaak-qtrjq-cai` |
 | `collection_bleu` | `ubnuj-uyaaa-aaaak-qudbq-cai` |
@@ -31,12 +31,12 @@ Depuis le dossier `collections` :
 make nfc-plan \
   NFC_COLLECTION=collection_bleu \
   NFC_ITEM_ID=0 \
-  NFC_NETWORK=ic
+  NFC_ENVIRONMENT=ic
 ```
 
 Cette commande vérifie notamment :
 
-- que l'alias existe dans `dfx.json` ;
+- que l'alias existe dans `icp.yaml` ;
 - que l'alias résout le Principal attendu ;
 - que l'Item existe dans la Collection ;
 - le path et l'URL NDEF qui seront programmés.
@@ -49,7 +49,7 @@ Pour exécuter réellement l'enrôlement :
 make nfc-program \
   NFC_COLLECTION=collection_bleu \
   NFC_ITEM_ID=0 \
-  NFC_NETWORK=ic
+  NFC_ENVIRONMENT=ic
 ```
 
 Le script propose alors deux choix :
@@ -84,7 +84,7 @@ collection_bleu-item-0-04958CAA5E5E80.key
 ```
 
 Son contenu JSON associe la clé à l'alias et au Principal de la Collection, au
-réseau, au numéro et au nom de l'Item, à l'UID et à la route NFC. Le fichier est
+environnement, au numéro et au nom de l'Item, à l'UID et à la route NFC. Le fichier est
 créé avec les permissions `0600`; il contient un secret et ne doit jamais être
 partagé, ajouté à Git ou supprimé tant que la puce est utilisée.
 
@@ -118,7 +118,7 @@ dans [`SNEAKERWEB_PRIVATE_DELIVERY.md`](SNEAKERWEB_PRIVATE_DELIVERY.md).
 Créer d'abord l'Item et conserver l'identifiant réellement retourné :
 
 ```bash
-make item-add NFC_COLLECTION=collection_bleu NFC_NETWORK=ic
+make item-add NFC_COLLECTION=collection_bleu NFC_ENVIRONMENT=ic
 ```
 
 Le numéro n'est pas choisi manuellement : la Collection attribue le prochain
@@ -135,17 +135,17 @@ reste une opération explicite par `reinstall`.
 Puis prévisualiser et programmer sa puce :
 
 ```bash
-make nfc-plan NFC_COLLECTION=collection_bleu NFC_ITEM_ID=<ID_RETOURNE> NFC_NETWORK=ic
-make nfc-program NFC_COLLECTION=collection_bleu NFC_ITEM_ID=<ID_RETOURNE> NFC_NETWORK=ic
+make nfc-plan NFC_COLLECTION=collection_bleu NFC_ITEM_ID=<ID_RETOURNE> NFC_ENVIRONMENT=ic
+make nfc-program NFC_COLLECTION=collection_bleu NFC_ITEM_ID=<ID_RETOURNE> NFC_ENVIRONMENT=ic
 ```
 
 Le même workflow s'applique à Heloise en sélectionnant explicitement son
 alias :
 
 ```bash
-make item-add NFC_COLLECTION=collection_heloise NFC_NETWORK=ic
-make nfc-plan NFC_COLLECTION=collection_heloise NFC_ITEM_ID=<ID_RETOURNE> NFC_NETWORK=ic
-make nfc-program NFC_COLLECTION=collection_heloise NFC_ITEM_ID=<ID_RETOURNE> NFC_NETWORK=ic
+make item-add NFC_COLLECTION=collection_heloise NFC_ENVIRONMENT=ic
+make nfc-plan NFC_COLLECTION=collection_heloise NFC_ITEM_ID=<ID_RETOURNE> NFC_ENVIRONMENT=ic
+make nfc-program NFC_COLLECTION=collection_heloise NFC_ITEM_ID=<ID_RETOURNE> NFC_ENVIRONMENT=ic
 ```
 
 ## État actuel de l'intégration Stitch
@@ -184,9 +184,9 @@ un `finalize_meeting`, puis deux `confirm_meeting`.
 Les anciennes cibles `protect` et `protect_ic` restent disponibles, mais sont
 désormais des alias de prévisualisation uniquement. Elles ne programment plus
 une puce implicitement. `NFC_COLLECTION` est toujours obligatoire, et
-`NFC_ITEM_ID` l'est pour chaque opération NFC. Sans `NFC_NETWORK`, les commandes
+`NFC_ITEM_ID` l'est pour chaque opération NFC. Sans `NFC_ENVIRONMENT`, les commandes
 ciblent `local` ; un ciblage de l'IC doit donc rester visible avec
-`NFC_NETWORK=ic`.
+`NFC_ENVIRONMENT=ic`.
 
 Les méthodes Candid qui exposent les tables CMAC complètes, les records de
 Stitch bruts (incluant l'identifiant interne du reader) et l'ancien stockage de

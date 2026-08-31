@@ -1,4 +1,6 @@
 import Text "mo:core/Text";
+import EvorevFonts "ui/evorev_fonts";
+import EvorevTheme "ui/evorev_theme";
 
 module {
     func escapeHtml(value : Text) : Text {
@@ -16,7 +18,7 @@ module {
         # "<meta charset=\"utf-8\">"
         # "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
         # "<title>" # safeFilename # "</title>"
-        # "<link rel=\"stylesheet\" href=\"/theme.css\">"
+        # "<style>" # EvorevFonts.css # EvorevTheme.css # "</style>"
         # "</head><body><main class=\"error-container\">"
         # "<h1 class=\"item-title\">" # safeFilename # "</h1>"
         # "<audio controls autoplay><source src=\"" # streamUrl # "\" type=\"audio/mp4\"></audio>"
